@@ -63,11 +63,29 @@ in
       SUBSTITUTE_URLS=
       source contrib/guix/libexec/prelude.bash
 
+      manifest_wrapper() {
+        local guix_system="$1"
+        local manifest="$2"
+        local wrapper_dir=${cfg.dataDir}/manifest-wrappers/"$guix_system"
+        local wrapper="$wrapper_dir/$(basename "$manifest")"
+
+        mkdir -p "$wrapper_dir"
+        cat > "$wrapper" <<EOF
+(use-modules (guix))
+
+(parameterize
+  ((%current-system "$guix_system"))
+  (primitive-load "$manifest"))
+EOF
+        printf '%s\n' "$wrapper"
+      }
+
       materialize_profile() {
         local guix_system="$1"
         local host="$2"
         local manifest="$3"
-        local profile="$4"
+        local manifest_file="$4"
+        local profile="$5"
 
         if [ -e "$profile" ]; then
           return
@@ -76,7 +94,7 @@ in
         echo "Building $manifest profile for $host on $guix_system..."
         HOST="$host" time-machine shell \
           --system="$guix_system" \
-          --manifest="$manifest" \
+          --manifest="$manifest_file" \
           --cores=${toString cfg.buildJobs} \
           --keep-failed \
           --fallback \
@@ -99,13 +117,15 @@ in
         local guix_system="$1"
         local host="$2"
         local manifest="$3"
+        local manifest_file
+        manifest_file="$(manifest_wrapper "$guix_system" "$manifest")"
 
         echo "Checking $manifest substitutes for $host on $guix_system..."
         until HOST="$host" \
           time-machine weather \
             --system="$guix_system" \
             --substitute-urls="$prewarm_url" \
-            --manifest="$manifest" \
+            --manifest="$manifest_file" \
           | grep -q '100.0% substitutes available'; do
           sleep 10
         done
@@ -116,7 +136,7 @@ in
         local profiles_dir=${profilesRoot}/"$guix_system"/"$commit"
         local last_built=${cfg.dataDir}/last-built-manifests-"$guix_system"
         local profiles_complete=true
-        local host manifest manifest_name
+        local host manifest manifest_name wrapper
 
         for host in ${lib.escapeShellArgs bitcoinGuixHosts}; do
           for manifest in "''${manifests[@]}"; do
@@ -139,10 +159,12 @@ in
           mkdir -p "$profiles_dir/$host"
           for manifest in "''${manifests[@]}"; do
             manifest_name="$(basename "$manifest" .scm)"
+            wrapper="$(manifest_wrapper "$guix_system" "$manifest")"
             materialize_profile \
               "$guix_system" \
               "$host" \
               "$manifest" \
+              "$wrapper" \
               "$profiles_dir/$host/$manifest_name"
           done
         done
