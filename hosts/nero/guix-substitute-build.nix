@@ -9,7 +9,6 @@ let
   profilesRoot = "${cfg.dataDir}/profiles";
   guixSystems = [
     "x86_64-linux"
-    "aarch64-linux"
   ];
   bitcoinGuixHosts = [
     "x86_64-linux-gnu"
@@ -23,15 +22,8 @@ let
   ];
 in
 {
-  boot.binfmt = {
-    emulatedSystems = [ "aarch64-linux" ];
-    preferStaticEmulators = true;
-  };
-
   systemd.services.guix-bitcoin-build = {
     description = lib.mkForce "Build Bitcoin Core Guix substitute profiles";
-    after = [ "systemd-binfmt.service" ];
-    wants = [ "systemd-binfmt.service" ];
     script = lib.mkForce ''
       set -euo pipefail
 
