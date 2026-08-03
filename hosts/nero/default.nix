@@ -115,6 +115,15 @@ in
 
   services.neroGuixOffload.hostKey = builtins.readFile ./guix-arm-builder-host-key.pub;
   services.neroGuixOffload.builderArchiveKeyFile = ./guix-arm-builder-archive-key.pub;
+  services.neroGuixOffload = {
+    enable = true;
+    host = "52.59.139.152";
+  };
+
+  services.neroGuixBuild.nativeSystems = [
+    "x86_64-linux"
+    "aarch64-linux"
+  ];
 
   services.guix.substituters.authorizedKeys =
     options.services.guix.substituters.authorizedKeys.default
