@@ -87,14 +87,13 @@ in
         local manifest="$2"
         local wrapper_dir=${cfg.dataDir}/manifest-wrappers/"$guix_system"
         local wrapper="$wrapper_dir/$(basename "$manifest")"
+        manifest="$(realpath "$manifest")"
 
         mkdir -p "$wrapper_dir"
         cat > "$wrapper" <<EOF
 (use-modules (guix))
 
-(parameterize
-  ((%current-system "$guix_system"))
-  (primitive-load "$manifest"))
+(primitive-load "$manifest")
 EOF
         printf '%s\n' "$wrapper"
       }
