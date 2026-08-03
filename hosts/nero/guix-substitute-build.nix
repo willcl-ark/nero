@@ -26,18 +26,19 @@ in
     description = "Native Guix systems whose Bitcoin profiles Nero materializes.";
   };
 
-  assertions = [
-    {
-      assertion =
-        !(lib.elem "aarch64-linux" nativeSystems)
-        || config.services.neroGuixOffload.enable;
-      message =
-        "aarch64-linux profile builds require services.neroGuixOffload.enable.\n"
-        + "This prevents an accidental local QEMU fallback.";
-    }
-  ];
+  config = {
+    assertions = [
+      {
+        assertion =
+          !(lib.elem "aarch64-linux" nativeSystems)
+          || config.services.neroGuixOffload.enable;
+        message =
+          "aarch64-linux profile builds require services.neroGuixOffload.enable.\n"
+          + "This prevents an accidental local QEMU fallback.";
+      }
+    ];
 
-  systemd.services.guix-bitcoin-build = {
+    systemd.services.guix-bitcoin-build = {
     description = lib.mkForce "Build Bitcoin Core Guix substitute profiles";
     script = lib.mkForce ''
       set -euo pipefail
@@ -205,9 +206,9 @@ EOF
         materialize_system "$guix_system"
       done
     '';
-  };
+    };
 
-  systemd.services.guix-bitcoin-build-cleanup.script = lib.mkForce ''
+    systemd.services.guix-bitcoin-build-cleanup.script = lib.mkForce ''
     for guix_system in ${lib.escapeShellArgs nativeSystems}; do
       profiles_dir=${profilesRoot}/"$guix_system"
       if [ -d "$profiles_dir" ]; then
@@ -226,5 +227,6 @@ EOF
       -name 'guix-build-*' \
       -mtime +${toString cfg.cleanup.maxAgeDays} \
       -exec rm -rf {} +
-  '';
+    '';
+  };
 }
