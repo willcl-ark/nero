@@ -61,6 +61,18 @@ in
       '';
     };
 
+    systemd.services.guix-offload-signing-key = {
+      description = "Install the Guix daemon signing key for offload";
+      after = [ "sops-install-secrets.service" ];
+      before = [ "guix-daemon.service" ];
+      wants = [ "sops-install-secrets.service" ];
+      wantedBy = [ "guix-daemon.service" ];
+      script = ''
+        install -m 0600 /run/secrets/guix-signing-key.sec /etc/guix/signing-key.sec
+      '';
+      serviceConfig.Type = "oneshot";
+    };
+
     services.guix.substituters.authorizedKeys = lib.mkAfter (
       lib.optional (cfg.builderArchiveKeyFile != null) cfg.builderArchiveKeyFile
     );
