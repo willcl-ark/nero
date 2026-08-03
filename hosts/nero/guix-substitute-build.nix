@@ -26,6 +26,17 @@ in
     description = "Native Guix systems whose Bitcoin profiles Nero materializes.";
   };
 
+  assertions = [
+    {
+      assertion =
+        !(lib.elem "aarch64-linux" nativeSystems)
+        || config.services.neroGuixOffload.enable;
+      message =
+        "aarch64-linux profile builds require services.neroGuixOffload.enable.\n"
+        + "This prevents an accidental local QEMU fallback.";
+    }
+  ];
+
   systemd.services.guix-bitcoin-build = {
     description = lib.mkForce "Build Bitcoin Core Guix substitute profiles";
     script = lib.mkForce ''
