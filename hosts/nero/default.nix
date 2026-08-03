@@ -205,9 +205,9 @@ in
   ];
 
   systemd.timers.guix-bitcoin-build.timerConfig = {
-    OnBootSec = lib.mkForce null;
+    OnBootSec = lib.mkForce [ ];
     OnCalendar = "*-*-* 06:00:00 UTC";
-    OnUnitActiveSec = lib.mkForce null;
+    OnUnitActiveSec = lib.mkForce [ ];
     Persistent = true;
     RandomizedDelaySec = lib.mkForce "0";
   };
