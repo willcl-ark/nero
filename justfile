@@ -89,6 +89,14 @@ arm-switch:
 arm-status:
     ssh -p {{arm_ssh_port}} {{arm_target}} "systemctl status guix-daemon.service sshd.service --no-pager"
 
+# Test Nero's configured Guix offload machines.
+guix-offload-test:
+    ssh -p {{ssh_port}} {{target}} "guix offload test"
+
+# Stop the ARM builder after an aborted or manual build.
+arm-poweroff:
+    ssh -p {{arm_ssh_port}} {{arm_target}} "systemctl poweroff"
+
 # Update flake inputs
 update:
     nix flake update
