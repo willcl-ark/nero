@@ -80,6 +80,14 @@
             ./hosts/nero
           ];
         };
+
+        nixosConfigurations.guix-arm-builder = inputs.nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            inputs.disko.nixosModules.disko
+            ./hosts/guix-arm-builder
+          ];
+        };
       };
     };
 }
