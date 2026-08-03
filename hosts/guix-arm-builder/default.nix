@@ -14,6 +14,7 @@
   networking.useDHCP = true;
 
   boot.loader.grub = {
+    devices = [ "nodev" ];
     efiSupport = true;
     efiInstallAsRemovable = true;
   };
