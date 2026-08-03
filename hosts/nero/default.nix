@@ -113,6 +113,9 @@ in
     mode = "0400";
   };
 
+  services.neroGuixOffload.hostKey = builtins.readFile ./guix-arm-builder-host-key.pub;
+  services.neroGuixOffload.builderArchiveKeyFile = ./guix-arm-builder-archive-key.pub;
+
   services.guix.substituters.authorizedKeys =
     options.services.guix.substituters.authorizedKeys.default
     ++ [ ./guix-signing-key.pub ];
