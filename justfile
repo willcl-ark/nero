@@ -4,7 +4,10 @@ target := "root@nero"
 ssh_port := env_var_or_default("SSH_PORT", "2222")
 arm_target := env_var_or_default("ARM_TARGET", "root@guix-arm-builder")
 arm_ssh_port := env_var_or_default("ARM_SSH_PORT", "22")
-arm_ssh_key := env_var_or_default("ARM_SSH_KEY", "~/.ssh/guix-builder-aarch64.pem")
+arm_ssh_key := env_var_or_default(
+    "ARM_SSH_KEY",
+    env_var_or_default("HOME", "/home/will") + "/.ssh/guix-builder-aarch64.pem",
+)
 module_inputs := "will-nix"
 
 [private]
