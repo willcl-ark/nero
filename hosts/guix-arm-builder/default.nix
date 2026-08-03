@@ -1,4 +1,6 @@
 {
+  config,
+  options,
   pkgs,
   ...
 }:
@@ -37,6 +39,25 @@
       "--max-jobs=4"
     ];
   };
+
+  # Guix offload uses archive signatures in addition to SSH. Generate the
+  # builder's local archive key once; Nero's public key is authorized above,
+  # and the generated builder public key must later be authorized on Nero.
+  systemd.services.guix-archive-key = {
+    description = "Generate the Guix builder archive key";
+    before = [ "guix-daemon.service" ];
+    wantedBy = [ "guix-daemon.service" ];
+    script = ''
+      if [ ! -e /etc/guix/signing-key.sec ]; then
+        ${config.services.guix.package}/bin/guix archive --generate-key
+      fi
+    '';
+    serviceConfig.Type = "oneshot";
+  };
+
+  services.guix.substituters.authorizedKeys =
+    options.services.guix.substituters.authorizedKeys.default
+    ++ [ ../nero/guix-signing-key.pub ];
 
   services.guix.gc = {
     enable = true;

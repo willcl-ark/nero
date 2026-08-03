@@ -104,6 +104,15 @@ in
     };
   };
 
+  # Add guix-arm-offload-private-key to secrets/secrets.yaml before enabling
+  # services.neroGuixOffload. Keeping this declaration gated lets the current
+  # x86-only deployment continue to build before the AWS host exists.
+  sops.secrets.guix-arm-offload-private-key = lib.mkIf config.services.neroGuixOffload.enable {
+    owner = "root";
+    group = "root";
+    mode = "0400";
+  };
+
   services.guix.substituters.authorizedKeys =
     options.services.guix.substituters.authorizedKeys.default
     ++ [ ./guix-signing-key.pub ];

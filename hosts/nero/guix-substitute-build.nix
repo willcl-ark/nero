@@ -59,6 +59,11 @@ in
       SUBSTITUTE_URLS=
       source contrib/guix/libexec/prelude.bash
 
+      if ${lib.boolToString (lib.elem "aarch64-linux" nativeSystems)}; then
+        echo "Checking native AArch64 Guix offload before building..."
+        guix offload test
+      fi
+
       manifest_wrapper() {
         local guix_system="$1"
         local manifest="$2"
