@@ -40,6 +40,9 @@ in
 
     systemd.services.guix-bitcoin-build = {
     description = lib.mkForce "Build Bitcoin Core Guix substitute profiles";
+    serviceConfig.ExecStartPost = lib.mkIf (lib.elem "aarch64-linux" nativeSystems) [
+      "+${pkgs.openssh}/bin/ssh -i ${config.services.neroGuixOffload.privateKeyFile} -o BatchMode=yes -o UserKnownHostsFile=/etc/ssh/guix-arm-builder_known_hosts ${config.services.neroGuixOffload.user}@${config.services.neroGuixOffload.host} systemctl poweroff"
+    ];
     script = lib.mkForce ''
       set -euo pipefail
 

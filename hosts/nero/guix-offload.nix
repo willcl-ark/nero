@@ -61,6 +61,9 @@ in
       '';
     };
 
+    environment.etc."ssh/guix-arm-builder_known_hosts".text =
+      "${cfg.host} ${cfg.hostKey}";
+
     systemd.services.guix-offload-signing-key = {
       description = "Install the Guix daemon signing key for offload";
       after = [ "sops-install-secrets.service" ];
