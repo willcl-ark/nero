@@ -115,7 +115,6 @@ EOF
           --manifest="$manifest_file" \
           --cores=${toString cfg.buildJobs} \
           --keep-failed \
-          --fallback \
           --root="$profile" \
           -- ${pkgs.coreutils}/bin/true
       }
