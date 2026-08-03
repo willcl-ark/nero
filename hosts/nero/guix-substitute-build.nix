@@ -87,7 +87,9 @@ in
         cat > "$wrapper" <<EOF
 (use-modules (guix))
 
-(primitive-load "$manifest")
+(parameterize
+  ((%current-system "$guix_system"))
+  (primitive-load "$manifest"))
 EOF
         printf '%s\n' "$wrapper"
       }
