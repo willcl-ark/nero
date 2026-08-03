@@ -68,7 +68,8 @@ in
       wants = [ "sops-install-secrets.service" ];
       wantedBy = [ "guix-daemon.service" ];
       script = ''
-        install -m 0600 /run/secrets/guix-signing-key.sec /etc/guix/signing-key.sec
+        install -m 0640 -o root -g guixbuild \
+          /run/secrets/guix-signing-key.sec /etc/guix/signing-key.sec
       '';
       serviceConfig.Type = "oneshot";
     };
