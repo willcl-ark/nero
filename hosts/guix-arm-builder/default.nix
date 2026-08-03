@@ -27,7 +27,7 @@
   # offload hook as root on Nero. Add the dedicated offload public key here
   # before enabling ARM offload on Nero.
   users.users.root.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH988C5DbEPHfoCphoW23MWq9M6fmA4UTXREiZU0J7n0 will.hetzner@temp.com"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDzRNgGG32ZCkP/7SybeANULwgFFtktJldekMPPOL3+m guix-builder-aarch64"
   ];
 
   networking.firewall.allowedTCPPorts = [ 22 ];
