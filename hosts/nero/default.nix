@@ -12,6 +12,7 @@ in
   imports = [
     ../common.nix
     ./disko.nix
+    ./guix-offload.nix
     ./guix-substitute-build.nix
     ./hardware-configuration.nix
   ];

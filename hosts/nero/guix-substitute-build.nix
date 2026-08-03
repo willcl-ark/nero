@@ -6,10 +6,8 @@
 }:
 let
   cfg = config.services.bitcoinCoreGuixSubstitutes;
+  nativeSystems = config.services.neroGuixBuild.nativeSystems;
   profilesRoot = "${cfg.dataDir}/profiles";
-  guixSystems = [
-    "x86_64-linux"
-  ];
   bitcoinGuixHosts = [
     "x86_64-linux-gnu"
     "arm-linux-gnueabihf"
@@ -22,6 +20,12 @@ let
   ];
 in
 {
+  options.services.neroGuixBuild.nativeSystems = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ "x86_64-linux" ];
+    description = "Native Guix systems whose Bitcoin profiles Nero materializes.";
+  };
+
   systemd.services.guix-bitcoin-build = {
     description = lib.mkForce "Build Bitcoin Core Guix substitute profiles";
     script = lib.mkForce ''
@@ -181,14 +185,14 @@ EOF
         printf '%s\n' "$commit" > "$last_built"
       }
 
-      for guix_system in ${lib.escapeShellArgs guixSystems}; do
+      for guix_system in ${lib.escapeShellArgs nativeSystems}; do
         materialize_system "$guix_system"
       done
     '';
   };
 
   systemd.services.guix-bitcoin-build-cleanup.script = lib.mkForce ''
-    for guix_system in ${lib.escapeShellArgs guixSystems}; do
+    for guix_system in ${lib.escapeShellArgs nativeSystems}; do
       profiles_dir=${profilesRoot}/"$guix_system"
       if [ -d "$profiles_dir" ]; then
         find "$profiles_dir" \

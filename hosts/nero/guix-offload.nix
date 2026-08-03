@@ -1,0 +1,58 @@
+{
+  config,
+  lib,
+  ...
+}:
+let
+  cfg = config.services.neroGuixOffload;
+in
+{
+  options.services.neroGuixOffload = {
+    enable = lib.mkEnableOption "Guix offload to the native ARM builder";
+
+    host = lib.mkOption {
+      type = lib.types.str;
+      default = "guix-arm-builder";
+      description = "Private DNS name or address of the ARM Guix builder.";
+    };
+
+    user = lib.mkOption {
+      type = lib.types.str;
+      default = "root";
+    };
+
+    hostKey = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "The ARM builder's SSH host key in OpenSSH format.";
+    };
+
+    privateKeyFile = lib.mkOption {
+      type = lib.types.path;
+      default = "/root/.ssh/identity-for-guix";
+      description = "Unencrypted SSH key used by the Guix daemon offload hook.";
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.hostKey != "";
+        message = "services.neroGuixOffload.hostKey must be set before enabling ARM offload.";
+      }
+    ];
+
+    environment.etc."guix/machines.scm" = {
+      mode = "0644";
+      text = ''
+        (list
+          (build-machine
+            (name "${cfg.host}")
+            (systems (list "aarch64-linux"))
+            (host-key "${cfg.hostKey}")
+            (user "${cfg.user}")
+            (private-key "${cfg.privateKeyFile}")))
+      '';
+    };
+  };
+}
