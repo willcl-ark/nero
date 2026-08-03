@@ -203,4 +203,12 @@ in
   systemd.services.guix-bitcoin-build.serviceConfig.ExecStartPre = lib.mkAfter [
     "+${pkgs.coreutils}/bin/chmod 0751 ${guixSubstitutesDataDir}"
   ];
+
+  systemd.timers.guix-bitcoin-build.timerConfig = {
+    OnBootSec = lib.mkForce "";
+    OnCalendar = "*-*-* 06:00:00 UTC";
+    OnUnitActiveSec = lib.mkForce "";
+    Persistent = true;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
 }
