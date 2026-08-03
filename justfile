@@ -2,6 +2,8 @@ set shell := ["bash", "-uc"]
 hostname := "nero"
 target := "root@nero"
 ssh_port := env_var_or_default("SSH_PORT", "2222")
+arm_target := env_var_or_default("ARM_TARGET", "root@guix-arm-builder")
+arm_ssh_port := env_var_or_default("ARM_SSH_PORT", "22")
 module_inputs := "will-nix"
 
 [private]
@@ -75,6 +77,18 @@ push:
 build:
     nix build .#nixosConfigurations.{{hostname}}.config.system.build.toplevel --show-trace
 
+# Install the native ARM builder through nixos-anywhere.
+arm-deploy:
+    nix run github:nix-community/nixos-anywhere -- --flake .#guix-arm-builder {{arm_target}}
+
+# Switch an already-installed ARM builder to the current configuration.
+arm-switch:
+    NIX_SSHOPTS='-p {{arm_ssh_port}}' nixos-rebuild switch --flake .#guix-arm-builder --target-host {{arm_target}}
+
+# Check the native ARM builder's Guix daemon and SSH service.
+arm-status:
+    ssh -p {{arm_ssh_port}} {{arm_target}} "systemctl status guix-daemon.service sshd.service --no-pager"
+
 # Update flake inputs
 update:
     nix flake update
@@ -89,6 +103,10 @@ logs network="mainnet":
 # Show and follow the Guix substitute profile build service.
 guix-build-logs:
     ssh -p {{ssh_port}} {{target}} "systemctl status guix-bitcoin-build.service --no-pager && journalctl -fu guix-bitcoin-build.service"
+
+# Start the Guix substitute profile build immediately.
+guix-build-start:
+    ssh -p {{ssh_port}} {{target}} "sudo systemctl start guix-bitcoin-build.service"
 
 # Report total node count in the dnsseedrs sqlite db
 @db-stats network="mainnet":
