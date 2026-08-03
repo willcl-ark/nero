@@ -86,6 +86,10 @@ update-modules:
 logs network="mainnet":
     ssh -p {{ssh_port}} {{target}} "systemctl status dnsseedrs-{{network}} && journalctl -f -u dnsseedrs-{{network}}"
 
+# Show and follow the Guix substitute profile build service.
+guix-build-logs:
+    ssh -p {{ssh_port}} {{target}} "systemctl status guix-bitcoin-build.service --no-pager && journalctl -fu guix-bitcoin-build.service"
+
 # Report total node count in the dnsseedrs sqlite db
 @db-stats network="mainnet":
     ssh -p {{ssh_port}} {{target}} "nix shell --quiet nixpkgs#sqlite -c sqlite3 /var/lib/dnsseedrs/{{network}}/sqlite.db 'SELECT COUNT(*) FROM nodes;'"
