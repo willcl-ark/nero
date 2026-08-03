@@ -4,6 +4,7 @@ target := "root@nero"
 ssh_port := env_var_or_default("SSH_PORT", "2222")
 arm_target := env_var_or_default("ARM_TARGET", "root@guix-arm-builder")
 arm_ssh_port := env_var_or_default("ARM_SSH_PORT", "22")
+arm_ssh_key := env_var_or_default("ARM_SSH_KEY", "~/.ssh/guix-builder-aarch64.pem")
 module_inputs := "will-nix"
 
 [private]
@@ -79,15 +80,15 @@ build:
 
 # Install the native ARM builder through nixos-anywhere.
 arm-deploy:
-    nix run github:nix-community/nixos-anywhere -- --flake .#guix-arm-builder {{arm_target}}
+    nix run github:nix-community/nixos-anywhere -- --ssh-option "IdentityFile={{arm_ssh_key}}" --flake .#guix-arm-builder {{arm_target}}
 
 # Switch an already-installed ARM builder to the current configuration.
 arm-switch:
-    NIX_SSHOPTS='-p {{arm_ssh_port}}' nixos-rebuild switch --flake .#guix-arm-builder --target-host {{arm_target}}
+    NIX_SSHOPTS='-i {{arm_ssh_key}} -p {{arm_ssh_port}}' nixos-rebuild switch --flake .#guix-arm-builder --target-host {{arm_target}}
 
 # Check the native ARM builder's Guix daemon and SSH service.
 arm-status:
-    ssh -p {{arm_ssh_port}} {{arm_target}} "systemctl status guix-daemon.service sshd.service --no-pager"
+    ssh -i {{arm_ssh_key}} -p {{arm_ssh_port}} {{arm_target}} "systemctl status guix-daemon.service sshd.service --no-pager"
 
 # Test Nero's configured Guix offload machines.
 guix-offload-test:
@@ -95,7 +96,7 @@ guix-offload-test:
 
 # Stop the ARM builder after an aborted or manual build.
 arm-poweroff:
-    ssh -p {{arm_ssh_port}} {{arm_target}} "systemctl poweroff"
+    ssh -i {{arm_ssh_key}} -p {{arm_ssh_port}} {{arm_target}} "systemctl poweroff"
 
 # Update flake inputs
 update:
