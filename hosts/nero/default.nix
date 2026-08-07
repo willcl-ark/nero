@@ -73,6 +73,72 @@ in
     mode = "0400";
   };
 
+  sops.secrets.niks3-api-token = {
+    owner = "niks3";
+    group = "niks3";
+    mode = "0400";
+  };
+
+  sops.secrets.niks3-signing-key = {
+    owner = "niks3";
+    group = "niks3";
+    mode = "0400";
+  };
+
+  sops.secrets.niks3-r2-access-key = {
+    owner = "niks3";
+    group = "niks3";
+    mode = "0400";
+  };
+
+  sops.secrets.niks3-r2-secret-key = {
+    owner = "niks3";
+    group = "niks3";
+    mode = "0400";
+  };
+
+  services.niks3 = {
+    enable = true;
+    httpAddr = "127.0.0.1:5751";
+
+    apiTokenFile = config.sops.secrets.niks3-api-token.path;
+    signKeyFiles = [ config.sops.secrets.niks3-signing-key.path ];
+
+    s3 = {
+      endpoint = "edfc2e5212d83182dfa64fa22e3899ec.r2.cloudflarestorage.com";
+      bucket = "nix-cache";
+      region = "auto";
+      useSSL = true;
+      accessKeyFile = config.sops.secrets.niks3-r2-access-key.path;
+      secretKeyFile = config.sops.secrets.niks3-r2-secret-key.path;
+    };
+
+    readProxy.enable = true;
+    cacheUrl = "https://cache.nix.fish.foo";
+    serverUrl = "https://cache.nix.fish.foo";
+
+    oidc.providers.github = {
+      issuer = "https://token.actions.githubusercontent.com";
+      audience = "https://cache.nix.fish.foo";
+      boundClaims.repository = [
+        "bitcoin/bitcoin"
+        "willcl-ark/bitcoin"
+      ];
+    };
+
+    gc = {
+      enable = true;
+      olderThan = "720h";
+      failedUploadsOlderThan = "6h";
+      schedule = "*-*-* 03:30:00 UTC";
+      randomizedDelaySec = 1800;
+    };
+  };
+
+  services.caddy.virtualHosts."cache.nix.fish.foo".extraConfig = ''
+    reverse_proxy 127.0.0.1:5751
+  '';
+
   services.radicleMirror = {
     enable = true;
     domain = "radicle.fish.foo";

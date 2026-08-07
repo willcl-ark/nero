@@ -24,6 +24,10 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    niks3 = {
+      url = "github:Mic92/niks3";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -61,6 +65,7 @@
             inputs.will-nix.nixosModules.bitcoin-core-guix-substitutes
             inputs.will-nix.nixosModules.stuntman
             inputs.will-nix.nixosModules.forgejo-site
+            inputs.niks3.nixosModules.niks3
             inputs.b10c-nix.nixosModules.default.github-metadata-backup
             {
               nixpkgs.overlays = [
