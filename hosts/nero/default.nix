@@ -148,6 +148,10 @@ in
     };
   };
 
+  services.forgejo.settings.migrations.ALLOWED_DOMAINS = lib.mkForce
+    "github.com,*.github.com,cygwin.com,sourceware.org,gitlab.com,*.gitlab.com";
+  services.forgejo.settings.migrations.ALLOW_LOCALNETWORKS = lib.mkForce true;
+
   services.forgejo.dump.age = "7d";
 
   services.github-metadata-backup.bitcoin = {
