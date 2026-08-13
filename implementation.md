@@ -434,6 +434,13 @@
   and use it as the shell probe, allowing target profiles to be materialized
   without executing target-architecture binaries locally.
 
+## Follow an activating oneshot worker without a false recipe failure
+
+- `systemctl status` returns a nonzero status while the oneshot worker is still
+  `activating`, even though its process is healthy and progressing.
+- Made `guix-manifest-logs` tolerate that transitional status before starting
+  `journalctl -fu`, so the recipe now behaves as a long-running log follower.
+
 ## Build the ARM NixOS deployment on the ARM host
 
 - `nixos-rebuild --build-host` still evaluates locally and transfers the

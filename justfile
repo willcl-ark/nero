@@ -121,7 +121,7 @@ logs network="mainnet":
 
 # Show and follow the Guix manifest worker.
 guix-manifest-logs:
-    ssh -p {{ssh_port}} {{target}} "systemctl status guix-manifest-worker.service --no-pager && journalctl -fu guix-manifest-worker.service"
+    ssh -p {{ssh_port}} {{target}} "systemctl status guix-manifest-worker.service --no-pager || true; journalctl -fu guix-manifest-worker.service"
 
 # Start the Guix manifest worker immediately.
 guix-manifest-start:
