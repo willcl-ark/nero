@@ -41,6 +41,7 @@ let
       export GUIX_BITCOIN_BUILD_USER=${lib.escapeShellArg cfg.buildUser}
       export GUIX_BITCOIN_BUILD_GROUP=${lib.escapeShellArg cfg.buildGroup}
       export GUIX_BITCOIN_BUILD_JOBS=${toString cfg.buildJobs}
+      export GUIX_BITCOIN_HOST_TRUE=${pkgs.coreutils}/bin/true
       export GUIX_BITCOIN_PREWARM_URL=http://${cfg.publishAddress}:${toString cfg.publishPort}
       export GUIX_BITCOIN_NATIVE_SYSTEMS=${lib.escapeShellArg nativeSystemsText}
       export GUIX_BITCOIN_TARGET_HOSTS=${lib.escapeShellArg bitcoinGuixHostsText}

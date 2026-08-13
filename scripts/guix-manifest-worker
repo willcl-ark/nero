@@ -6,6 +6,7 @@ data_dir=${GUIX_BITCOIN_DATA_DIR:?GUIX_BITCOIN_DATA_DIR is required}
 jobs_dir=$data_dir/jobs
 profiles_root=$data_dir/profiles
 build_jobs=${GUIX_BITCOIN_BUILD_JOBS:?GUIX_BITCOIN_BUILD_JOBS is required}
+host_true=${GUIX_BITCOIN_HOST_TRUE:?GUIX_BITCOIN_HOST_TRUE is required}
 prewarm_url=${GUIX_BITCOIN_PREWARM_URL:?GUIX_BITCOIN_PREWARM_URL is required}
 native_systems=${GUIX_BITCOIN_NATIVE_SYSTEMS:?GUIX_BITCOIN_NATIVE_SYSTEMS is required}
 target_hosts=${GUIX_BITCOIN_TARGET_HOSTS:?GUIX_BITCOIN_TARGET_HOSTS is required}
@@ -156,7 +157,7 @@ materialize_job() {
                     --manifest="$wrapper" \
                     --cores="$build_jobs" \
                     --root="$profile" \
-                    -- true; then
+                    -- "$host_true"; then
                     write_result "$job" "$system" "$host" "${name%.scm}" failed "$profile"
                     return 1
                 fi

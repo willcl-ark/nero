@@ -425,6 +425,15 @@
   validation behavior, worker recovery and terminal transitions with a fake
   Guix command, NixOS option evaluation, and a complete `nero` system build.
 
+## Keep cross-system profile probes on the host
+
+- The manifest worker originally ran `guix shell --system=aarch64-linux ... --
+  true`. Guix resolved `true` from the target profile, so Nero's x86_64 host
+  attempted to execute an AArch64 binary after the offloaded build succeeded.
+- Injected an absolute Nero-side Coreutils `true` into the worker environment
+  and use it as the shell probe, allowing target profiles to be materialized
+  without executing target-architecture binaries locally.
+
 ## Build the ARM NixOS deployment on the ARM host
 
 - `nixos-rebuild --build-host` still evaluates locally and transfers the
