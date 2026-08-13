@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+data_dir=${GUIX_BITCOIN_DATA_DIR:?GUIX_BITCOIN_DATA_DIR is required}
+jobs_dir=$data_dir/jobs
+profiles_root=$data_dir/profiles
+build_jobs=${GUIX_BITCOIN_BUILD_JOBS:?GUIX_BITCOIN_BUILD_JOBS is required}
+prewarm_url=${GUIX_BITCOIN_PREWARM_URL:?GUIX_BITCOIN_PREWARM_URL is required}
+native_systems=${GUIX_BITCOIN_NATIVE_SYSTEMS:?GUIX_BITCOIN_NATIVE_SYSTEMS is required}
+target_hosts=${GUIX_BITCOIN_TARGET_HOSTS:?GUIX_BITCOIN_TARGET_HOSTS is required}
+time_machine_flags=${GUIX_BITCOIN_TIMEMACHINE_FLAGS:-}
+arm_enabled=${GUIX_BITCOIN_ARM_ENABLED:-false}
+
+mkdir -p "$jobs_dir/.tmp" "$jobs_dir/queued" "$jobs_dir/running" \
+    "$jobs_dir/succeeded" "$jobs_dir/failed" "$profiles_root"
+
+recover_running_jobs() {
+    shopt -s nullglob
+    for job in "$jobs_dir/running"/*; do
+        [[ -d $job ]] || continue
+        mv -T --no-clobber -- "$job" "$jobs_dir/queued/$(basename "$job")"
+    done
+    shopt -u nullglob
+}
+
+time_machine() {
+    local -a flags=()
+    if [[ -n $time_machine_flags ]]; then
+        read -r -a flags <<< "$time_machine_flags"
+    fi
+    guix time-machine \
+        --url=https://codeberg.org/guix/guix.git \
+        --commit=c5eee3336cc1d10a3cc1c97fde2809c3451624d3 \
+        --cores="$build_jobs" \
+        --keep-failed \
+        --fallback \
+        "${flags[@]}" \
+        -- "$@"
+}
+
+manifest_wrapper() {
+    local system=$1
+    local source=$2
+    local output=$3
+    mkdir -p "$(dirname "$output")"
+    cat > "$output" <<EOF
+(use-modules (guix))
+
+(parameterize
+  ((%current-system "$system"))
+  (primitive-load "$source"))
+EOF
+}
+
+prewarm_store_path() {
+    local path=$1
+    local hash=${path##*/}
+    hash=${hash%%-*}
+    until curl -fsS -o /dev/null "$prewarm_url/$hash.narinfo"; do
+        sleep 10
+    done
+}
+
+write_result() {
+    local job=$1
+    local system=$2
+    local host=$3
+    local manifest=$4
+    local status=$5
+    local profile=$6
+    local result_dir=$job/results/$system/$host
+    local result_tmp
+    mkdir -p "$result_dir"
+    result_tmp=$(mktemp "$result_dir/.result.XXXXXX")
+    printf 'status=%s\nmanifest=%s\nnative_system=%s\ntarget_host=%s\nprofile=%s\n' \
+        "$status" "$manifest" "$system" "$host" "$profile" > "$result_tmp"
+    mv -- "$result_tmp" "$result_dir/$manifest.result"
+}
+
+check_manifest() {
+    local system=$1
+    local host=$2
+    local manifest_file=$3
+    until HOST="$host" time_machine weather \
+        --system="$system" \
+        --substitute-urls="$prewarm_url" \
+        --manifest="$manifest_file" | grep -q '100.0% substitutes available'; do
+        sleep 10
+    done
+}
+
+materialize_job() {
+    local job_id=$1
+    local job=$jobs_dir/running/$job_id
+    local manifests_dir=$job/manifests
+    local context_manifest_dir=$job/context/contrib/guix
+    local work_dir=$job/work
+    local manifest source wrapper profile
+    local system host name
+    local -a manifests=()
+    local -a systems=()
+    local -a hosts=()
+
+    [[ -f $job/metadata && -d $manifests_dir ]] || {
+        echo "invalid job structure: $job_id" >&2
+        return 1
+    }
+    if find "$job" -type l -print -quit | grep -q .; then
+        echo "job contains a symlink: $job_id" >&2
+        return 1
+    fi
+    if [[ -d $job/context ]] && find "$job/context" ! -type f ! -type d -print -quit | grep -q .; then
+        echo "job context contains a non-regular entry: $job_id" >&2
+        return 1
+    fi
+    mapfile -t manifests < <(find "$manifests_dir" -mindepth 1 -maxdepth 1 -print | sort)
+    (("${#manifests[@]}" > 0)) || {
+        echo "job has no manifests: $job_id" >&2
+        return 1
+    }
+    for manifest in "${manifests[@]}"; do
+        name=$(basename "$manifest")
+        [[ -f $manifest && ! -L $manifest ]] || {
+            echo "manifest entries must be regular files: $name" >&2
+            return 1
+        }
+        [[ $name =~ ^manifest_[A-Za-z0-9._-]+\.scm$ ]] || {
+            echo "unsafe manifest filename: $name" >&2
+            return 1
+        }
+    done
+    read -r -a systems <<< "$native_systems"
+    read -r -a hosts <<< "$target_hosts"
+    (("${#systems[@]}" > 0 && "${#hosts[@]}" > 0)) || {
+        echo "native system and target host lists must not be empty" >&2
+        return 1
+    }
+
+    for system in "${systems[@]}"; do
+        for host in "${hosts[@]}"; do
+            for manifest in "${manifests[@]}"; do
+                name=$(basename "$manifest")
+                source=$manifest
+                if [[ -f $context_manifest_dir/$name ]]; then
+                    source=$context_manifest_dir/$name
+                fi
+                wrapper=$work_dir/wrappers/$system/$name
+                profile=$profiles_root/$system/$job_id/$host/${name%.scm}
+                mkdir -p "$(dirname "$profile")"
+                manifest_wrapper "$system" "$source" "$wrapper"
+
+                echo "Building $job_id: $name for $host on $system"
+                if ! HOST="$host" time_machine shell \
+                    --system="$system" \
+                    --manifest="$wrapper" \
+                    --cores="$build_jobs" \
+                    --root="$profile" \
+                    -- true; then
+                    write_result "$job" "$system" "$host" "${name%.scm}" failed "$profile"
+                    return 1
+                fi
+                write_result "$job" "$system" "$host" "${name%.scm}" built "$profile"
+            done
+        done
+    done
+
+    echo "Prewarming Guix substitute closures for $job_id"
+    for system in "${systems[@]}"; do
+        for host in "${hosts[@]}"; do
+            for manifest in "${manifests[@]}"; do
+                name=$(basename "$manifest")
+                profile=$profiles_root/$system/$job_id/$host/${name%.scm}
+                guix gc --requisites "$(readlink -f "$profile")"
+            done
+        done
+    done | sort -u | while IFS= read -r path; do
+        prewarm_store_path "$path"
+    done
+
+    for system in "${systems[@]}"; do
+        for host in "${hosts[@]}"; do
+            for manifest in "${manifests[@]}"; do
+                name=$(basename "$manifest")
+                check_manifest "$system" "$host" "$work_dir/wrappers/$system/$name"
+                profile=$profiles_root/$system/$job_id/$host/${name%.scm}
+                write_result "$job" "$system" "$host" "${name%.scm}" succeeded "$profile"
+            done
+        done
+    done
+}
+
+prepare_arm() {
+    local active_file=$jobs_dir/.arm-active
+    local region=${GUIX_BITCOIN_ARM_REGION:?GUIX_BITCOIN_ARM_REGION is required}
+    local instance_id=${GUIX_BITCOIN_ARM_INSTANCE_ID:?GUIX_BITCOIN_ARM_INSTANCE_ID is required}
+    touch "$active_file"
+    local state
+    state=$(aws ec2 describe-instances --region="$region" --instance-ids="$instance_id" \
+        --query='Reservations[0].Instances[0].State.Name' --output=text)
+    case $state in
+        stopped)
+            aws ec2 start-instances --region="$region" --instance-ids="$instance_id" >/dev/null
+            ;;
+        stopping)
+            aws ec2 wait instance-stopped --region="$region" --instance-ids="$instance_id"
+            aws ec2 start-instances --region="$region" --instance-ids="$instance_id" >/dev/null
+            ;;
+        pending|running)
+            ;;
+        *)
+            echo "ERR: ARM Guix builder is in unexpected state: $state" >&2
+            return 1
+            ;;
+    esac
+    aws ec2 wait instance-running --region="$region" --instance-ids="$instance_id"
+    until guix offload test; do
+        echo "Waiting for ARM Guix builder offload readiness..."
+        sleep 10
+    done
+}
+
+arm_prepared=false
+arm_cleanup() {
+    if [[ $arm_prepared == true ]]; then
+        guix-bitcoin-arm-stop || echo "WARN: failed to stop ARM Guix builder" >&2
+    fi
+}
+trap arm_cleanup EXIT
+
+recover_running_jobs
+
+while :; do
+    claimed=false
+    shopt -s nullglob
+    for queued in "$jobs_dir/queued"/*; do
+        [[ -d $queued ]] || continue
+        job_id=$(basename "$queued")
+        if ! [[ $job_id =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+$ ]]; then
+            echo "Skipping unsafe queued job name: $job_id" >&2
+            continue
+        fi
+        if ! mv -T --no-clobber -- "$queued" "$jobs_dir/running/$job_id" 2>/dev/null \
+            || [[ -e $queued ]]; then
+            continue
+        fi
+        claimed=true
+        if [[ $arm_enabled == true && $arm_prepared == false ]]; then
+            prepare_arm
+            arm_prepared=true
+        fi
+        job=$jobs_dir/running/$job_id
+        set +e
+        (materialize_job "$job_id") 2>&1 | tee -a "$job/worker.log"
+        status=${PIPESTATUS[0]}
+        set -e
+        if ((status == 0)); then
+            mv -T --no-clobber -- "$job" "$jobs_dir/succeeded/$job_id"
+            echo "Job $job_id succeeded"
+        else
+            mv -T --no-clobber -- "$job" "$jobs_dir/failed/$job_id"
+            echo "Job $job_id failed" >&2
+            exit "$status"
+        fi
+        break
+    done
+    shopt -u nullglob
+    [[ $claimed == true ]] || break
+done

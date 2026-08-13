@@ -69,6 +69,17 @@ just build
 just logs
 just logs signet
 
+# Submit immutable Guix manifest jobs
+just guix-submit-manifests contrib/guix/manifest_build.scm context=contrib/guix
+just guix-submit-manifests \
+    contrib/guix/manifest_build.scm \
+    contrib/guix/manifest_codesign.scm \
+    context=contrib/guix
+
+# Follow or start the manifest worker
+just guix-manifest-logs
+just guix-manifest-start
+
 # Update flake inputs
 just update
 ```

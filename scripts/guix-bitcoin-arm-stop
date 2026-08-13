@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+data_dir=${GUIX_BITCOIN_DATA_DIR:?GUIX_BITCOIN_DATA_DIR is required}
+active_file=$data_dir/jobs/.arm-active
+lock_file=${GUIX_BITCOIN_ARM_MAINTENANCE_LOCK:-$data_dir/jobs/arm-maintenance.lock}
+if [[ ! -e $active_file || -e $lock_file ]]; then
+    exit 0
+fi
+
+region=${GUIX_BITCOIN_ARM_REGION:?GUIX_BITCOIN_ARM_REGION is required}
+instance_id=${GUIX_BITCOIN_ARM_INSTANCE_ID:?GUIX_BITCOIN_ARM_INSTANCE_ID is required}
+state=$(aws ec2 describe-instances \
+    --region="$region" \
+    --instance-ids="$instance_id" \
+    --query='Reservations[0].Instances[0].State.Name' \
+    --output=text)
+case $state in
+    running|pending)
+        echo "Stopping ARM Guix builder $instance_id via AWS API..."
+        aws ec2 stop-instances --region="$region" --instance-ids="$instance_id" >/dev/null
+        ;;
+    stopping|stopped)
+        ;;
+    *)
+        echo "ERR: ARM Guix builder is in unexpected state: $state" >&2
+        exit 1
+        ;;
+esac
+rm -f -- "$active_file"

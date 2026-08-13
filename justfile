@@ -1,6 +1,7 @@
 set shell := ["bash", "-uc"]
 hostname := "nero"
 target := "root@nero"
+guix_data_dir := "/gnu/guix-bitcoin"
 ssh_port := env_var_or_default("SSH_PORT", "2222")
 arm_target := env_var_or_default("ARM_TARGET", "root@guix-arm-builder")
 arm_ssh_port := env_var_or_default("ARM_SSH_PORT", "22")
@@ -112,13 +113,61 @@ update-modules:
 logs network="mainnet":
     ssh -p {{ssh_port}} {{target}} "systemctl status dnsseedrs-{{network}} && journalctl -f -u dnsseedrs-{{network}}"
 
-# Show and follow the Guix substitute profile build service.
-guix-build-logs:
-    ssh -p {{ssh_port}} {{target}} "systemctl status guix-bitcoin-build.service --no-pager && journalctl -fu guix-bitcoin-build.service"
+# Show and follow the Guix manifest worker.
+guix-manifest-logs:
+    ssh -p {{ssh_port}} {{target}} "systemctl status guix-manifest-worker.service --no-pager && journalctl -fu guix-manifest-worker.service"
 
-# Start the Guix substitute profile build immediately.
-guix-build-start:
-    ssh -p {{ssh_port}} {{target}} "sudo systemctl start guix-bitcoin-build.service"
+# Start the Guix manifest worker immediately.
+guix-manifest-start:
+    ssh -p {{ssh_port}} {{target}} "sudo systemctl start guix-manifest-worker.service"
+
+# Submit one or more immutable manifest files. Use context=PATH for SCM files.
+guix-submit-manifests +args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    manifests=()
+    declare -A seen_manifests=()
+    context=
+    for arg in {{args}}; do
+        case "$arg" in
+            context=*) context=${arg#context=} ;;
+            *.scm) manifests+=("$arg") ;;
+            *) echo "expected manifest path or context=PATH: $arg" >&2; exit 2 ;;
+        esac
+    done
+    if (("${#manifests[@]}" == 0)); then
+        echo "submit at least one manifest_*.scm file" >&2
+        exit 2
+    fi
+    stage=$(mktemp -d)
+    trap 'rm -rf -- "$stage"' EXIT
+    mkdir -p "$stage/manifests"
+    for manifest in "${manifests[@]}"; do
+        name=$(basename -- "$manifest")
+        if [[ ! "$name" =~ ^manifest_[A-Za-z0-9._-]+\.scm$ || ! -f "$manifest" || -L "$manifest" ]]; then
+            echo "invalid manifest: $manifest" >&2
+            exit 2
+        fi
+        if [[ -n ${seen_manifests[$name]+x} ]]; then
+            echo "duplicate manifest basename: $name" >&2
+            exit 2
+        fi
+        seen_manifests[$name]=1
+        cp -- "$manifest" "$stage/manifests/$name"
+    done
+    if [[ -n "$context" ]]; then
+        mkdir -p "$stage/context/contrib/guix"
+        cp -a -- "$context/." "$stage/context/contrib/guix/"
+    fi
+    remote_stage=$(ssh -p {{ssh_port}} {{target}} "sudo mktemp -d {{guix_data_dir}}/jobs/.tmp/manual.XXXXXX")
+    remote_stage_q=$(printf '%q' "$remote_stage")
+    trap 'ssh -p {{ssh_port}} {{target}} "sudo rm -rf -- $remote_stage_q"' EXIT
+    tar -C "$stage" -cf - . | ssh -p {{ssh_port}} {{target}} "sudo tar -C $remote_stage_q -xf -"
+    job_id=$(ssh -p {{ssh_port}} {{target}} "sudo /run/current-system/sw/bin/guix-bitcoin-submit --staged $remote_stage_q --method manual")
+    ssh -p {{ssh_port}} {{target}} "sudo rm -rf -- $remote_stage_q; sudo systemctl start --no-block guix-manifest-worker.service"
+    trap - EXIT
+    rm -rf -- "$stage"
+    echo "submitted job $job_id"
 
 # Report total node count in the dnsseedrs sqlite db
 @db-stats network="mainnet":

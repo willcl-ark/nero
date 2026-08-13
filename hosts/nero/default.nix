@@ -179,6 +179,24 @@ in
     mode = "0400";
   };
 
+  sops.secrets.aws-nero-access-key = {
+    owner = "guix-bitcoin-build";
+    group = "guix-bitcoin-build";
+    mode = "0400";
+  };
+
+  sops.secrets.aws-nero-secret-key = {
+    owner = "guix-bitcoin-build";
+    group = "guix-bitcoin-build";
+    mode = "0400";
+  };
+
+  sops.templates."guix-bitcoin-build-aws-env".content = ''
+    AWS_ACCESS_KEY_ID=${config.sops.placeholder."aws-nero-access-key"}
+    AWS_SECRET_ACCESS_KEY=${config.sops.placeholder."aws-nero-secret-key"}
+    AWS_DEFAULT_REGION=eu-central-1
+  '';
+
   services.neroGuixOffload.hostKey = builtins.readFile ./guix-arm-builder-host-key.pub;
   services.neroGuixOffload.builderArchiveKeyFile = ./guix-arm-builder-archive-key.pub;
   services.neroGuixOffload = {
@@ -190,6 +208,9 @@ in
     "x86_64-linux"
     "aarch64-linux"
   ];
+
+  systemd.services.guix-manifest-worker.serviceConfig.EnvironmentFile =
+    config.sops.templates."guix-bitcoin-build-aws-env".path;
 
   services.guix.substituters.authorizedKeys =
     options.services.guix.substituters.authorizedKeys.default
@@ -270,15 +291,8 @@ in
     "+${pkgs.coreutils}/bin/chmod 0751 ${guixSubstitutesDataDir}"
   ];
 
-  systemd.services.guix-bitcoin-build.serviceConfig.ExecStartPre = lib.mkAfter [
+  systemd.services.guix-manifest-worker.serviceConfig.ExecStartPre = lib.mkAfter [
     "+${pkgs.coreutils}/bin/chmod 0751 ${guixSubstitutesDataDir}"
   ];
 
-  systemd.timers.guix-bitcoin-build.timerConfig = {
-    OnBootSec = lib.mkForce [ ];
-    OnCalendar = "*-*-* 06:00:00 UTC";
-    OnUnitActiveSec = lib.mkForce [ ];
-    Persistent = true;
-    RandomizedDelaySec = lib.mkForce "0";
-  };
 }
