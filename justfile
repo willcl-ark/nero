@@ -86,9 +86,15 @@ build:
 arm-deploy:
     nix run github:nix-community/nixos-anywhere -- --ssh-option "IdentityFile={{arm_ssh_key}}" --flake .#guix-arm-builder {{arm_target}}
 
+# Sync the repository to the ARM builder for remote evaluation and builds.
+[private]
+sync-arm-remote:
+    rsync -avz -e 'ssh -i {{arm_ssh_key}} -p {{arm_ssh_port}}' --delete --exclude='.git' --filter=':- .gitignore' ./ {{arm_target}}:/etc/nixos/
+    ssh -i {{arm_ssh_key}} -p {{arm_ssh_port}} {{arm_target}} "git config --global --add safe.directory /etc/nixos && cd /etc/nixos && git init -q && git add -A"
+
 # Switch an already-installed ARM builder to the current configuration.
-arm-switch:
-    NIX_SSHOPTS='-i {{arm_ssh_key}} -p {{arm_ssh_port}}' nixos-rebuild switch --flake .#guix-arm-builder --build-host {{arm_target}} --target-host {{arm_target}} --use-substitutes
+arm-switch: sync-arm-remote
+    ssh -i {{arm_ssh_key}} -p {{arm_ssh_port}} {{arm_target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#guix-arm-builder"
 
 # Check the native ARM builder's Guix daemon and SSH service.
 arm-status:

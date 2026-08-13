@@ -424,3 +424,12 @@
 - Verified Bash syntax, Just parsing/dry-run expansion, atomic submission and
   validation behavior, worker recovery and terminal transitions with a fake
   Guix command, NixOS option evaluation, and a complete `nero` system build.
+
+## Build the ARM NixOS deployment on the ARM host
+
+- `nixos-rebuild --build-host` still evaluates locally and transfers the
+  resulting derivation closure to the remote host. This is unsuitable for a
+  bandwidth-limited ARM deployment because it transfers many `.drv` paths.
+- Changed `just arm-switch` to rsync the repository source to `/etc/nixos` and
+  invoke `nixos-rebuild switch` there, matching Nero's remote deployment
+  pattern. The ARM host now performs evaluation and closure construction.
