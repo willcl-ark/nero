@@ -88,7 +88,7 @@ arm-deploy:
 
 # Switch an already-installed ARM builder to the current configuration.
 arm-switch:
-    NIX_SSHOPTS='-i {{arm_ssh_key}} -p {{arm_ssh_port}}' nixos-rebuild switch --flake .#guix-arm-builder --target-host {{arm_target}}
+    NIX_SSHOPTS='-i {{arm_ssh_key}} -p {{arm_ssh_port}}' nixos-rebuild switch --flake .#guix-arm-builder --build-host {{arm_target}} --target-host {{arm_target}} --use-substitutes
 
 # Check the native ARM builder's Guix daemon and SSH service.
 arm-status:
