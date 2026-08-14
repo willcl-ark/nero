@@ -449,3 +449,73 @@
 - Changed `just arm-switch` to rsync the repository source to `/etc/nixos` and
   invoke `nixos-rebuild switch` there, matching Nero's remote deployment
   pattern. The ARM host now performs evaluation and closure construction.
+
+## Check pinned Guix substitutes for aarch64
+
+- The completed job captured the same `prelude.bash` as the current Bitcoin
+  checkout, including the Guix time-machine commit
+  `c5eee3336cc1d10a3cc1c97fde2809c3451624d3`.
+- Generated job wrappers retain a `jobs/running/<job-id>` manifest path after
+  the job moves to `jobs/succeeded`; use the captured context manifest directly
+  for post-build weather checks.
+- With the pinned Guix revision and `HOST=aarch64-linux-gnu`, the remote
+  `guix.fish.foo` endpoint supplied 18 of 24 aarch64 items (75.0%); six
+  cross-toolchain items were missing.
+- Locally, invoke `guix time-machine ... -- weather ...` and set `HOST` to
+  `aarch64-linux-gnu` when checking aarch64 cross-toolchain substitutes.
+- The worker's ARM-native weather check wraps the manifest in a `parameterize`
+  for `%current-system` before `primitive-load`ing it. A regular x86_64
+  `guix-build` evaluates the raw manifest on its native x86_64 system, so its
+  matching weather check must use `--system=x86_64-linux`; using
+  `--system=aarch64-linux` checks a different derivation set.
+- The historical Aug 13 `guix-bitcoin-build.service` still used the older
+  time-machine commit `3b98aa3889888dd1a69d30bed2a5f1a8519fd06c` and failed
+  while building `gcc-cross-sans-libc-aarch64-linux-gnu-14.3.0`.
+- The deployed manifest worker contains the `c5eee3336cc1d10a3cc1c97fde2809c3451624d3`
+  pin. Its wrapper-style weather check reports 24/24 substitutes available
+  from `https://guix.fish.foo`, including the six expensive toolchain items.
+- `contrib/guix/guix-build` forwards `SUBSTITUTE_URLS` only when the regular
+  user sets it; the cache URL is not hard-coded in the Bitcoin Core script.
+
+## Prime substitutes for regular Guix builders
+
+- The worker's manifest wrapper is intentional: it parameterizes
+  `%current-system` so each native build system gets its own correct
+  derivations. The raw manifest is correct for regular `guix-build` because
+  that command evaluates it on the builder's actual native system.
+- Nero is configured to build both `x86_64-linux` and `aarch64-linux` native
+  profiles, across the Bitcoin target-host matrix. It prewarms every profile
+  requisite and waits for the local publisher to expose each `.narinfo`.
+- A regular user must set `SUBSTITUTE_URLS` and authorize Nero's signing key;
+  `guix-build` does not hard-code the substitute URL.
+- Generated wrappers currently retain `jobs/running/<job-id>` source paths
+  after a job moves to `jobs/succeeded`. This is a post-hoc inspection bug,
+  not a build/cache derivation bug; use the captured context manifest with the
+  correct native system until the wrapper path is made stable.
+
+## Retain and publish Guix build-input closures
+
+- A final manifest profile exposes only its direct/runtime package closure. A
+  top-level toolchain derivation can reference the complete bootstrap and
+  compiler closure through its `.drv`; the aarch64 cross-toolchain graph
+  currently has 743 requisites, including mesboot GCC, bootstrapped binutils,
+  headers, glibc, and final GCC stages.
+- To serve these inputs, the worker now obtains the top-level `.drv` paths for
+  each system/host/manifest using the same pinned time-machine and wrapper,
+  roots those `.drv` paths, and prewarms `guix gc --requisites` on the `.drv`
+  roots. `guix publish` already serves any valid rooted store path; no
+  manifest-specific publisher allowlist is needed.
+- This is optional for normal users once final outputs are cached, but it is
+  required if the goal is to retain and serve the complete no-substitute build
+  closure. It will substantially increase store/cache usage across both
+  native systems and the target-host matrix.
+
+## Parallelize publisher cache baking
+
+- The first closure prewarm was serial: it waited for one NAR to finish baking
+  before requesting the next one, despite Nero's publisher having 16 workers.
+- The worker now maintains 16 concurrent prewarm requests, allowing
+  `guix publish` to use its configured baking workers while retaining the
+  existing retry behavior for paths whose NARs are still being generated.
+- Derivation rooting is idempotent so an interrupted job can be requeued and
+  resumed without treating its existing correct GC-root symlinks as errors.

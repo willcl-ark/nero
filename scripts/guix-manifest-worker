@@ -8,6 +8,7 @@ profiles_root=$data_dir/profiles
 build_jobs=${GUIX_BITCOIN_BUILD_JOBS:?GUIX_BITCOIN_BUILD_JOBS is required}
 host_true=${GUIX_BITCOIN_HOST_TRUE:?GUIX_BITCOIN_HOST_TRUE is required}
 prewarm_url=${GUIX_BITCOIN_PREWARM_URL:?GUIX_BITCOIN_PREWARM_URL is required}
+prewarm_jobs=16
 native_systems=${GUIX_BITCOIN_NATIVE_SYSTEMS:?GUIX_BITCOIN_NATIVE_SYSTEMS is required}
 target_hosts=${GUIX_BITCOIN_TARGET_HOSTS:?GUIX_BITCOIN_TARGET_HOSTS is required}
 time_machine_flags=${GUIX_BITCOIN_TIMEMACHINE_FLAGS:-}
@@ -56,10 +57,61 @@ EOF
 
 prewarm_store_path() {
     local path=$1
+    case $path in
+        *.drv)
+            return 0
+            ;;
+    esac
     local hash=${path##*/}
     hash=${hash%%-*}
     until curl -fsS -o /dev/null "$prewarm_url/$hash.narinfo"; do
         sleep 10
+    done
+}
+
+prewarm_store_paths() {
+    local path
+    local running=0
+    while IFS= read -r path; do
+        prewarm_store_path "$path" &
+        ((running += 1))
+        if ((running == prewarm_jobs)); then
+            wait -n
+            ((running -= 1))
+        fi
+    done
+    while ((running > 0)); do
+        wait -n
+        ((running -= 1))
+    done
+}
+
+root_derivations() {
+    local root_dir=$1
+    shift
+    local derivation root
+    local -A seen=()
+    mkdir -p "$root_dir"
+    for derivation in "$@"; do
+        [[ $derivation == /gnu/store/*.drv && -e $derivation ]] || {
+            echo "invalid derivation path: $derivation" >&2
+            return 1
+        }
+        [[ ${seen[$derivation]+yes} ]] && continue
+        seen[$derivation]=yes
+        root=$root_dir/$(basename "$derivation")
+        if [[ -L $root ]]; then
+            [[ $(readlink -f "$root") == "$derivation" ]] || {
+                echo "GC root points to the wrong derivation: $root" >&2
+                return 1
+            }
+            continue
+        fi
+        [[ ! -e $root ]] || {
+            echo "GC root is not a symlink: $root" >&2
+            return 1
+        }
+        guix build --derivations --root="$root" "$derivation" >/dev/null
     done
 }
 
@@ -97,11 +149,13 @@ materialize_job() {
     local manifests_dir=$job/manifests
     local context_manifest_dir=$job/context/contrib/guix
     local work_dir=$job/work
-    local manifest source wrapper profile
+    local manifest source wrapper profile derivation_roots_dir derivation_root
+    local derivations_output
     local system host name
     local -a manifests=()
     local -a systems=()
     local -a hosts=()
+    local -a derivations=()
 
     [[ -f $job/metadata && -d $manifests_dir ]] || {
         echo "invalid job structure: $job_id" >&2
@@ -148,6 +202,7 @@ materialize_job() {
                 fi
                 wrapper=$work_dir/wrappers/$system/$name
                 profile=$profiles_root/$system/$job_id/$host/${name%.scm}
+                derivation_roots_dir=$profile.derivations
                 mkdir -p "$(dirname "$profile")"
                 manifest_wrapper "$system" "$source" "$wrapper"
 
@@ -158,6 +213,19 @@ materialize_job() {
                     --cores="$build_jobs" \
                     --root="$profile" \
                     -- "$host_true"; then
+                    write_result "$job" "$system" "$host" "${name%.scm}" failed "$profile"
+                    return 1
+                fi
+
+                if ! derivations_output=$(HOST="$host" time_machine build \
+                    --system="$system" \
+                    --manifest="$wrapper" \
+                    --derivations); then
+                    write_result "$job" "$system" "$host" "${name%.scm}" failed "$profile"
+                    return 1
+                fi
+                mapfile -t derivations <<< "$derivations_output"
+                if ((${#derivations[@]} == 0)) || ! root_derivations "$derivation_roots_dir" "${derivations[@]}"; then
                     write_result "$job" "$system" "$host" "${name%.scm}" failed "$profile"
                     return 1
                 fi
@@ -173,11 +241,14 @@ materialize_job() {
                 name=$(basename "$manifest")
                 profile=$profiles_root/$system/$job_id/$host/${name%.scm}
                 guix gc --requisites "$(readlink -f "$profile")"
+                derivation_roots_dir=$profile.derivations
+                for derivation_root in "$derivation_roots_dir"/*.drv; do
+                    [[ -L $derivation_root ]] || continue
+                    guix gc --requisites "$(readlink -f "$derivation_root")"
+                done
             done
         done
-    done | sort -u | while IFS= read -r path; do
-        prewarm_store_path "$path"
-    done
+    done | sort -u | prewarm_store_paths
 
     for system in "${systems[@]}"; do
         for host in "${hosts[@]}"; do

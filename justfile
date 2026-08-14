@@ -3,7 +3,7 @@ hostname := "nero"
 target := "root@nero"
 guix_data_dir := "/gnu/guix-bitcoin"
 ssh_port := env_var_or_default("SSH_PORT", "2222")
-arm_target := env_var_or_default("ARM_TARGET", "root@guix-arm-builder")
+arm_target := env_var_or_default("ARM_TARGET", "root@arm-guix-builder")
 arm_ssh_port := env_var_or_default("ARM_SSH_PORT", "22")
 arm_ssh_key := env_var_or_default(
     "ARM_SSH_KEY",

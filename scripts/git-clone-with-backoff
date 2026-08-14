@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if (( $# != 1 )); then
+    echo "usage: $0 DESTINATION_ROOT" >&2
+    exit 2
+fi
+
+destination_root=$1
+
+if [[ ! -d $destination_root ]]; then
+    echo "destination root does not exist: $destination_root" >&2
+    exit 2
+fi
+
+urls=(
+    "https://cygwin.com/git/newlib-cygwin.git"
+    "https://sourceware.org/git/binutils-gdb.git"
+    "https://sourceware.org/git/glibc.git"
+)
+
+is_transient_failure() {
+    grep -Eiq \
+        '(HTTP |returned error: )429|HTTP 5[0-9][0-9]|returned error: 5[0-9][0-9]|Could not resolve host|Could not connect|Connection timed out|Connection reset|remote end hung up unexpectedly|early EOF|network is unreachable' \
+        "$1"
+}
+
+clone_with_backoff() {
+    local url=$1
+    local destination=$2
+    local parent
+    local attempt=0
+    local partial
+    local log
+    local jitter
+    local wait_time
+
+    if [[ -e $destination ]]; then
+        if [[ -d $destination ]] && git -C "$destination" rev-parse --is-bare-repository 2>/dev/null | grep -qx true; then
+            echo "skipping existing bare repository: $destination" >&2
+            return 0
+        fi
+        echo "refusing to overwrite non-bare or invalid destination: $destination" >&2
+        return 2
+    fi
+
+    parent=$(dirname -- "$destination")
+
+    while :; do
+        attempt=$((attempt + 1))
+        partial=$(mktemp -d "$parent/.git-clone-retry.XXXXXX")
+        log="$partial/output.log"
+
+        echo "attempt $attempt: cloning $url" >&2
+        if GIT_TERMINAL_PROMPT=0 git clone --mirror "$url" "$partial/repository.git" 2>&1 | tee "$log"; then
+            mv -- "$partial/repository.git" "$destination"
+            rm -f -- "$log"
+            rmdir -- "$partial"
+            echo "clone succeeded: $destination" >&2
+            return 0
+        fi
+
+        if ! is_transient_failure "$log"; then
+            echo "non-transient clone failure; stopping" >&2
+            rm -rf -- "$partial"
+            return 1
+        fi
+
+        wait_time=$((RANDOM % 46 + 15))
+        echo "transient failure; retrying in ${wait_time}s" >&2
+        rm -rf -- "$partial"
+        sleep "$wait_time"
+    done
+}
+
+for url in "${urls[@]}"; do
+    repo_name=${url##*/}
+    repo_name=${repo_name%.git}
+    clone_with_backoff "$url" "$destination_root/$repo_name.git"
+done
