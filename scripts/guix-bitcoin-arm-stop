@@ -3,7 +3,7 @@
 set -euo pipefail
 
 data_dir=${GUIX_BITCOIN_DATA_DIR:?GUIX_BITCOIN_DATA_DIR is required}
-active_file=$data_dir/jobs/.arm-active
+active_file=${GUIX_BITCOIN_ARM_ACTIVE_FILE:-$data_dir/jobs/.arm-active}
 lock_file=${GUIX_BITCOIN_ARM_MAINTENANCE_LOCK:-$data_dir/jobs/arm-maintenance.lock}
 if [[ ! -e $active_file || -e $lock_file ]]; then
     exit 0

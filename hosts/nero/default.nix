@@ -2,18 +2,17 @@
   config,
   lib,
   options,
-  pkgs,
   ...
 }:
 let
-  guixSubstitutesDataDir = config.services.bitcoinCoreGuixSubstitutes.dataDir;
+  guixSubstitutesBuilder = config.services.bitcoinCoreGuixSubstitutes.builder;
 in
 {
   imports = [
     ../common.nix
     ./disko.nix
+    ./guix-arm-lifecycle.nix
     ./guix-offload.nix
-    ./guix-substitute-build.nix
     ./hardware-configuration.nix
   ];
 
@@ -168,26 +167,34 @@ in
       privateFile = ../../secrets/guix/signing-key.sec;
       signatureFile = ../../secrets/guix/signing-key.pub.asc;
     };
+
+    builder = {
+      enable = true;
+      nativeSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+    };
   };
 
   # Add guix-arm-offload-private-key to secrets/secrets.yaml before enabling
   # services.neroGuixOffload. Keeping this declaration gated lets the current
   # x86-only deployment continue to build before the AWS host exists.
   sops.secrets.guix-arm-offload-private-key = lib.mkIf config.services.neroGuixOffload.enable {
-    owner = "guix-bitcoin-build";
-    group = "guix-bitcoin-build";
+    owner = guixSubstitutesBuilder.buildUser;
+    group = guixSubstitutesBuilder.buildGroup;
     mode = "0400";
   };
 
   sops.secrets.aws-nero-access-key = {
-    owner = "guix-bitcoin-build";
-    group = "guix-bitcoin-build";
+    owner = guixSubstitutesBuilder.buildUser;
+    group = guixSubstitutesBuilder.buildGroup;
     mode = "0400";
   };
 
   sops.secrets.aws-nero-secret-key = {
-    owner = "guix-bitcoin-build";
-    group = "guix-bitcoin-build";
+    owner = guixSubstitutesBuilder.buildUser;
+    group = guixSubstitutesBuilder.buildGroup;
     mode = "0400";
   };
 
@@ -203,14 +210,6 @@ in
     enable = true;
     host = "52.59.139.152";
   };
-
-  services.neroGuixBuild.nativeSystems = [
-    "x86_64-linux"
-    "aarch64-linux"
-  ];
-
-  systemd.services.guix-manifest-worker.serviceConfig.EnvironmentFile =
-    config.sops.templates."guix-bitcoin-build-aws-env".path;
 
   services.guix.substituters.authorizedKeys =
     options.services.guix.substituters.authorizedKeys.default
@@ -282,17 +281,5 @@ in
     after = [ "sops-install-secrets.service" ];
     wants = [ "sops-install-secrets.service" ];
   };
-
-  systemd.tmpfiles.rules = lib.mkAfter [
-    "z ${guixSubstitutesDataDir} 0751 guix-bitcoin-build guix-bitcoin-build -"
-  ];
-
-  systemd.services.guix-publish.serviceConfig.ExecStartPre = lib.mkAfter [
-    "+${pkgs.coreutils}/bin/chmod 0751 ${guixSubstitutesDataDir}"
-  ];
-
-  systemd.services.guix-manifest-worker.serviceConfig.ExecStartPre = lib.mkAfter [
-    "+${pkgs.coreutils}/bin/chmod 0751 ${guixSubstitutesDataDir}"
-  ];
 
 }
