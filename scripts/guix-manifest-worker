@@ -115,6 +115,113 @@ root_derivations() {
     done
 }
 
+derivation_outputs_are_rooted() {
+    local root_base=$1
+    shift
+    local root output
+    local missing=false
+    local index=0
+    local output_count=$#
+
+    for output in "$@"; do
+        if ((output_count == 1)); then
+            root=$root_base
+        else
+            root=$root_base-$index
+        fi
+
+        if [[ -L $root ]]; then
+            [[ $(readlink -f "$root") == "$output" ]] || {
+                echo "GC root points to the wrong derivation output: $root" >&2
+                return 2
+            }
+        elif [[ -e $root ]]; then
+            echo "GC root is not a symlink: $root" >&2
+            return 2
+        else
+            missing=true
+        fi
+        ((index += 1))
+    done
+
+    [[ $missing == false ]]
+}
+
+materialize_derivation_outputs() {
+    local root_dir=$1
+    shift
+    local derivation root output outputs_output root_status
+    local -A seen=()
+    local -a outputs=()
+
+    mkdir -p "$root_dir"
+    for derivation in "$@"; do
+        [[ $derivation == /gnu/store/*.drv && -e $derivation ]] || {
+            echo "invalid derivation path: $derivation" >&2
+            return 1
+        }
+        [[ ${seen[$derivation]+yes} ]] && continue
+        seen[$derivation]=yes
+
+        if ! outputs_output=$(guix build \
+            --cores="$build_jobs" \
+            --keep-failed \
+            --fallback \
+            "$derivation"); then
+            return 1
+        fi
+        outputs=()
+        while IFS= read -r output; do
+            [[ -n $output ]] && outputs+=("$output")
+        done <<< "$outputs_output"
+        ((${#outputs[@]} > 0)) || {
+            echo "derivation has no outputs: $derivation" >&2
+            return 1
+        }
+
+        root=$root_dir/$(basename "${derivation%.drv}")
+        root_status=0
+        derivation_outputs_are_rooted "$root" "${outputs[@]}" || root_status=$?
+        case $root_status in
+            0) continue ;;
+            1) ;;
+            *) return 1 ;;
+        esac
+        guix build \
+            --cores="$build_jobs" \
+            --keep-failed \
+            --fallback \
+            --root="$root" \
+            "$derivation" >/dev/null
+    done
+}
+
+materialize_derivation_closure_outputs() {
+    local root_dir=$1
+    shift
+    local derivation path derivations_output
+    local -a derivations=()
+
+    if ! derivations_output=$(
+        for derivation in "$@"; do
+            guix gc --requisites "$derivation"
+        done | while IFS= read -r path; do
+            [[ $path == /gnu/store/*.drv ]] && printf '%s\n' "$path"
+        done | sort -u
+    ); then
+        return 1
+    fi
+    while IFS= read -r derivation; do
+        [[ -n $derivation ]] && derivations+=("$derivation")
+    done <<< "$derivations_output"
+    ((${#derivations[@]} > 0)) || {
+        echo "derivation closure has no derivations" >&2
+        return 1
+    }
+
+    materialize_derivation_outputs "$root_dir" "${derivations[@]}"
+}
+
 write_result() {
     local job=$1
     local system=$2
@@ -149,7 +256,8 @@ materialize_job() {
     local manifests_dir=$job/manifests
     local context_manifest_dir=$job/context/contrib/guix
     local work_dir=$job/work
-    local manifest source wrapper profile derivation_roots_dir derivation_root
+    local manifest source wrapper profile
+    local derivation_roots_dir derivation_outputs_dir derivation_root output_root
     local derivations_output
     local system host name
     local -a manifests=()
@@ -203,6 +311,7 @@ materialize_job() {
                 wrapper=$work_dir/wrappers/$system/$name
                 profile=$profiles_root/$system/$job_id/$host/${name%.scm}
                 derivation_roots_dir=$profile.derivations
+                derivation_outputs_dir=$profile.derivation-outputs
                 mkdir -p "$(dirname "$profile")"
                 manifest_wrapper "$system" "$source" "$wrapper"
 
@@ -225,7 +334,9 @@ materialize_job() {
                     return 1
                 fi
                 mapfile -t derivations <<< "$derivations_output"
-                if ((${#derivations[@]} == 0)) || ! root_derivations "$derivation_roots_dir" "${derivations[@]}"; then
+                if ((${#derivations[@]} == 0)) \
+                    || ! root_derivations "$derivation_roots_dir" "${derivations[@]}" \
+                    || ! materialize_derivation_closure_outputs "$derivation_outputs_dir" "${derivations[@]}"; then
                     write_result "$job" "$system" "$host" "${name%.scm}" failed "$profile"
                     return 1
                 fi
@@ -245,6 +356,11 @@ materialize_job() {
                 for derivation_root in "$derivation_roots_dir"/*.drv; do
                     [[ -L $derivation_root ]] || continue
                     guix gc --requisites "$(readlink -f "$derivation_root")"
+                done
+                derivation_outputs_dir=$profile.derivation-outputs
+                for output_root in "$derivation_outputs_dir"/*; do
+                    [[ -L $output_root ]] || continue
+                    guix gc --requisites "$(readlink -f "$output_root")"
                 done
             done
         done
