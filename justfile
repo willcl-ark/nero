@@ -119,61 +119,35 @@ update-modules:
 logs network="mainnet":
     ssh -p {{ssh_port}} {{target}} "systemctl status dnsseedrs-{{network}} && journalctl -f -u dnsseedrs-{{network}}"
 
-# Show and follow the Guix manifest worker.
-guix-manifest-logs:
-    ssh -p {{ssh_port}} {{target}} "systemctl status guix-manifest-worker.service --no-pager || true; journalctl -fu guix-manifest-worker.service"
+# Show and follow the Guix Bitcoin worker.
+guix-worker-logs:
+    ssh -p {{ssh_port}} {{target}} "systemctl status guix-bitcoin-worker.service --no-pager || true; journalctl -fu guix-bitcoin-worker.service"
 
-# Start the Guix manifest worker immediately.
-guix-manifest-start:
-    ssh -p {{ssh_port}} {{target}} "sudo systemctl start guix-manifest-worker.service"
+# Start the Guix Bitcoin worker immediately.
+guix-worker-start:
+    ssh -p {{ssh_port}} {{target}} "systemctl start guix-bitcoin-worker.service"
 
-# Submit one or more immutable manifest files. Use context=PATH for SCM files.
-guix-submit-manifests +args:
+# Submit an exact Bitcoin Core commit, optionally from a fork repository.
+guix-submit commit repository="":
     #!/usr/bin/env bash
     set -euo pipefail
-    manifests=()
-    declare -A seen_manifests=()
-    context=
-    for arg in {{args}}; do
-        case "$arg" in
-            context=*) context=${arg#context=} ;;
-            *.scm) manifests+=("$arg") ;;
-            *) echo "expected manifest path or context=PATH: $arg" >&2; exit 2 ;;
-        esac
-    done
-    if (("${#manifests[@]}" == 0)); then
-        echo "submit at least one manifest_*.scm file" >&2
+    commit={{quote(commit)}}
+    repository={{quote(repository)}}
+    if [[ ! $commit =~ ^[0-9a-f]{40}$ ]]; then
+        echo "commit must be a full lowercase 40-character hash" >&2
         exit 2
     fi
-    stage=$(mktemp -d)
-    trap 'rm -rf -- "$stage"' EXIT
-    mkdir -p "$stage/manifests"
-    for manifest in "${manifests[@]}"; do
-        name=$(basename -- "$manifest")
-        if [[ ! "$name" =~ ^manifest_[A-Za-z0-9._-]+\.scm$ || ! -f "$manifest" || -L "$manifest" ]]; then
-            echo "invalid manifest: $manifest" >&2
-            exit 2
-        fi
-        if [[ -n ${seen_manifests[$name]+x} ]]; then
-            echo "duplicate manifest basename: $name" >&2
-            exit 2
-        fi
-        seen_manifests[$name]=1
-        cp -- "$manifest" "$stage/manifests/$name"
-    done
-    if [[ -n "$context" ]]; then
-        mkdir -p "$stage/context/contrib/guix"
-        cp -a -- "$context/." "$stage/context/contrib/guix/"
-    fi
-    remote_stage=$(ssh -p {{ssh_port}} {{target}} "sudo mktemp -d {{guix_data_dir}}/jobs/.tmp/manual.XXXXXX")
-    remote_stage_q=$(printf '%q' "$remote_stage")
-    trap 'ssh -p {{ssh_port}} {{target}} "sudo rm -rf -- $remote_stage_q"' EXIT
-    tar -C "$stage" -cf - . | ssh -p {{ssh_port}} {{target}} "sudo tar -C $remote_stage_q -xf -"
-    job_id=$(ssh -p {{ssh_port}} {{target}} "sudo /run/current-system/sw/bin/guix-bitcoin-submit --staged $remote_stage_q --method manual")
-    ssh -p {{ssh_port}} {{target}} "sudo rm -rf -- $remote_stage_q; sudo systemctl start --no-block guix-manifest-worker.service"
-    trap - EXIT
-    rm -rf -- "$stage"
+    submit=(/run/current-system/sw/bin/guix-bitcoin-submit)
+    [[ -z $repository ]] || submit+=(--repository "$repository")
+    submit+=("$commit")
+    remote_command=$(printf '%q ' "${submit[@]}")
+    job_id=$(ssh -p {{ssh_port}} {{target}} "$remote_command")
+    ssh -p {{ssh_port}} {{target}} "systemctl start --no-block guix-bitcoin-worker.service"
     echo "submitted job $job_id"
+
+# Fetch and submit the configured Bitcoin Core master branch now.
+guix-submit-master:
+    ssh -p {{ssh_port}} {{target}} "systemctl start guix-bitcoin-nightly.service"
 
 # Report total node count in the dnsseedrs sqlite db
 @db-stats network="mainnet":

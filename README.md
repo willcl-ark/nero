@@ -69,16 +69,17 @@ just build
 just logs
 just logs signet
 
-# Submit immutable Guix manifest jobs
-just guix-submit-manifests contrib/guix/manifest_build.scm context=contrib/guix
-just guix-submit-manifests \
-    contrib/guix/manifest_build.scm \
-    contrib/guix/manifest_codesign.scm \
-    context=contrib/guix
+# Submit an exact Bitcoin Core commit, from upstream or a fork
+just guix-submit 0123456789abcdef0123456789abcdef01234567
+just guix-submit 0123456789abcdef0123456789abcdef01234567 \
+    https://github.com/example/bitcoin
 
-# Follow or start the manifest worker
-just guix-manifest-logs
-just guix-manifest-start
+# Fetch and submit the configured bitcoin/bitcoin master branch now
+just guix-submit-master
+
+# Follow or start the Bitcoin source-job worker
+just guix-worker-logs
+just guix-worker-start
 
 # Update flake inputs
 just update

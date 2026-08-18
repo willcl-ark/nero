@@ -99,7 +99,7 @@ in
       }
     ];
 
-    systemd.services.guix-manifest-worker = {
+    systemd.services.guix-bitcoin-worker = {
       after = [ "sops-install-secrets.service" ];
       wants = [ "sops-install-secrets.service" ];
       serviceConfig = {
