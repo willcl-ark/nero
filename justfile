@@ -142,13 +142,11 @@ guix-queue:
                 [ -d "$job" ] || continue
                 found=true
                 printf "  %s\n" "${job##*/}"
-                if [ -f "$job/metadata" ]; then
-                    sed -n \
-                        -e "/^source_repository=/p" \
-                        -e "/^source_commit=/p" \
-                        "$job/metadata" | sed "s/^/    /"
+                if [ -f "$job/source_repository" ] && [ -f "$job/source_commit" ]; then
+                    printf "    source_repository=%s\n" "$(cat "$job/source_repository")"
+                    printf "    source_commit=%s\n" "$(cat "$job/source_commit")"
                 else
-                    printf "    (missing metadata)\n"
+                    printf "    (missing source descriptor)\n"
                 fi
             done
             [ "$found" = true ] || printf "  (empty)\n"
