@@ -81,6 +81,9 @@ just guix-submit-master
 just guix-worker-logs
 just guix-worker-start
 
+# Show the worker state and queued/running jobs
+just guix-queue
+
 # Update flake inputs
 just update
 ```

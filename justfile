@@ -127,6 +127,35 @@ guix-worker-logs:
 guix-worker-start:
     ssh -p {{ssh_port}} {{target}} "systemctl start guix-bitcoin-worker.service"
 
+# Show the worker state and queued or running source jobs.
+guix-queue:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ssh -p {{ssh_port}} {{target}} '
+        jobs_root={{guix_data_dir}}/jobs
+        worker_state=$(systemctl is-active guix-bitcoin-worker.service 2>/dev/null || true)
+        printf "worker: %s\n" "${worker_state:-unknown}"
+        for state in queued running; do
+            printf "\n%s:\n" "$state"
+            found=false
+            for job in "$jobs_root/$state"/*; do
+                [ -d "$job" ] || continue
+                found=true
+                printf "  %s\n" "${job##*/}"
+                if [ -f "$job/metadata" ]; then
+                    sed -n \
+                        -e "/^submitted_at=/p" \
+                        -e "/^source_repository=/p" \
+                        -e "/^source_commit=/p" \
+                        "$job/metadata" | sed "s/^/    /"
+                else
+                    printf "    (missing metadata)\n"
+                fi
+            done
+            [ "$found" = true ] || printf "  (empty)\n"
+        done
+    '
+
 # Submit an exact Bitcoin Core commit, optionally from a fork repository.
 guix-submit commit repository="":
     #!/usr/bin/env bash
