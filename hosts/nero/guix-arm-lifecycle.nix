@@ -13,7 +13,6 @@ let
   runtimeDirectory = "guix-bitcoin-arm-lifecycle";
   runtimePath = "/run/${runtimeDirectory}";
   activeFile = "${runtimePath}/active";
-  maintenanceLock = "${jobsRoot}/arm-maintenance.lock";
   region = "eu-central-1";
   instanceId = "i-033b747d5599f78b9";
 
@@ -76,7 +75,6 @@ let
   armStop = pkgs.writeShellScript "guix-bitcoin-arm-stop" ''
     export GUIX_BITCOIN_DATA_DIR=${lib.escapeShellArg cfg.dataDir}
     export GUIX_BITCOIN_ARM_ACTIVE_FILE=${lib.escapeShellArg activeFile}
-    export GUIX_BITCOIN_ARM_MAINTENANCE_LOCK=${lib.escapeShellArg maintenanceLock}
     export GUIX_BITCOIN_ARM_REGION=${lib.escapeShellArg region}
     export GUIX_BITCOIN_ARM_INSTANCE_ID=${lib.escapeShellArg instanceId}
     export PATH=${

@@ -75,6 +75,7 @@ just guix-submit 0123456789abcdef0123456789abcdef01234567 \
     https://github.com/example/bitcoin
 
 # Fetch and submit the configured bitcoin/bitcoin master branch now
+# (returns immediately; submit job handling continues on the host)
 just guix-submit-master
 
 # Follow or start the Bitcoin source-job worker

@@ -144,7 +144,6 @@ guix-queue:
                 printf "  %s\n" "${job##*/}"
                 if [ -f "$job/metadata" ]; then
                     sed -n \
-                        -e "/^submitted_at=/p" \
                         -e "/^source_repository=/p" \
                         -e "/^source_commit=/p" \
                         "$job/metadata" | sed "s/^/    /"
@@ -176,7 +175,7 @@ guix-submit commit repository="":
 
 # Fetch and submit the configured Bitcoin Core master branch now.
 guix-submit-master:
-    ssh -p {{ssh_port}} {{target}} "systemctl start guix-bitcoin-nightly.service"
+    ssh -p {{ssh_port}} {{target}} "systemctl start --no-block guix-bitcoin-nightly.service"
 
 # Report total node count in the dnsseedrs sqlite db
 @db-stats network="mainnet":
