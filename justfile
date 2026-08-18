@@ -125,7 +125,7 @@ guix-worker-logs:
 
 # Start the Guix Bitcoin worker immediately.
 guix-worker-start:
-    ssh -p {{ssh_port}} {{target}} "systemctl start guix-bitcoin-worker.service"
+    ssh -p {{ssh_port}} {{target}} "systemctl start --no-block guix-bitcoin-worker.service"
 
 # Show the worker state and queued or running source jobs.
 guix-queue:
