@@ -6,6 +6,7 @@
 }:
 let
   guixSubstitutesBuilder = config.services.bitcoinCoreGuixSubstitutes.builder;
+  guixPublish2KnownHost = lib.removeSuffix "\n" (builtins.readFile ./guix-publish-2-known-host);
 in
 {
   imports = [
@@ -95,6 +96,36 @@ in
     group = "niks3";
     mode = "0400";
   };
+
+  sops.secrets.guix-publish-2-ssh-key = {
+    sopsFile = ../../secrets/guix/nero-to-guix-publish-2;
+    format = "binary";
+    owner = "root";
+    group = "root";
+    mode = "0400";
+  };
+
+  environment.etc."ssh/guix-publish-2.conf".text = ''
+    Host guix-publish-2
+      HostName guix2.fish.foo
+      User root
+      Port 22
+      IdentityFile ${config.sops.secrets.guix-publish-2-ssh-key.path}
+      IdentitiesOnly yes
+  '';
+
+  systemd.tmpfiles.rules = [
+    "d /root/.ssh 0700 root root -"
+    "L+ /root/.ssh/config - - - - /etc/ssh/guix-publish-2.conf"
+  ];
+
+  system.activationScripts.guix-publish-2-known-host.text = ''
+    known_host=${lib.escapeShellArg guixPublish2KnownHost}
+    install -d -m 0700 /root/.ssh
+    touch /root/.ssh/known_hosts
+    chmod 600 /root/.ssh/known_hosts
+    grep -qxF "$known_host" /root/.ssh/known_hosts || printf '%s\n' "$known_host" >> /root/.ssh/known_hosts
+  '';
 
   services.niks3 = {
     enable = true;
