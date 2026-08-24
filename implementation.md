@@ -519,3 +519,22 @@
   existing retry behavior for paths whose NARs are still being generated.
 - Derivation rooting is idempotent so an interrupted job can be requeued and
   resumed without treating its existing correct GC-root symlinks as errors.
+
+## Isolate Nero dnsseedrs egress through WireGuard
+
+- The public DNS listener remains in Nero's root network namespace. CoreDNS
+  forwards the seed zones over a veth pair to dnsseedrs listeners in a
+  dedicated `dnsseedrs` namespace, so public DNS service is not interrupted.
+- NixOS creates the WireGuard interface in the root namespace and moves it
+  into the dnsseedrs namespace. The WireGuard peer's IPv4 and IPv6 catch-all
+  routes therefore apply only to the two dnsseedrs services.
+- A dedicated veth route and narrowly scoped IPv4/IPv6 NAT let the namespace
+  reach both the WireGuard endpoint and the tunnel without changing Nero's
+  ordinary default routes.
+- Tor and I2P SOCKS endpoints are exposed only on the veth address so the
+  isolated dnsseedrs processes retain their existing proxy transports; those
+  proxy daemons remain outside the WireGuard namespace.
+- sops-nix systemd activation provisions the WireGuard private key before the
+  tunnel starts, including after a reboot. The Ubuntu egress VPS masquerades
+  only the WireGuard tunnel addresses on `eth0`; Nero's other services
+  continue to use their existing routes.

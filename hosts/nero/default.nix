@@ -15,6 +15,7 @@ in
     ./guix-arm-lifecycle.nix
     ./guix-offload.nix
     ./hardware-configuration.nix
+    ./dnsseedrs-wireguard.nix
   ];
 
   networking.hostName = "nero";
@@ -32,7 +33,7 @@ in
 
   services.bitcoinDnsSeed.mainnet = {
     enable = true;
-    threads = 40;
+    threads = 100;
   };
   services.bitcoinDnsSeed.signet = {
     enable = true;
