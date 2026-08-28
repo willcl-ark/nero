@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    dnsseedrs = {
+      url = "github:willcl-ark/dnsseedrs";
+      flake = false;
+    };
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -32,6 +36,13 @@
 
   outputs =
     inputs:
+    let
+      dnsseedrsPackageModule =
+        { pkgs, ... }:
+        {
+          services.bitcoinDnsSeed.package = pkgs.callPackage inputs.dnsseedrs { };
+        };
+    in
     inputs.flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
         "x86_64-linux"
@@ -51,6 +62,7 @@
             inputs.disko.nixosModules.disko
             inputs.sops-nix.nixosModules.sops
             inputs.will-nix.nixosModules.bitcoin-dnsseed
+            dnsseedrsPackageModule
             ./hosts/dnsseed
           ];
         };
@@ -61,6 +73,7 @@
             inputs.disko.nixosModules.disko
             inputs.sops-nix.nixosModules.sops
             inputs.will-nix.nixosModules.bitcoin-dnsseed
+            dnsseedrsPackageModule
             inputs.will-nix.nixosModules.radicle-mirror
             inputs.will-nix.nixosModules.bitcoin-core-guix-substitutes
             inputs.will-nix.nixosModules.stuntman

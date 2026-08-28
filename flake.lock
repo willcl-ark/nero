@@ -40,6 +40,22 @@
         "type": "github"
       }
     },
+    "dnsseedrs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787925135,
+        "narHash": "sha256-zqB3OHQ+e8f+atpejVt0dgrnnrw4Enh6ZvGi5nphIag=",
+        "owner": "willcl-ark",
+        "repo": "dnsseedrs",
+        "rev": "791fb2e7636c7ef4cf79b499cf7b25c07363990e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "willcl-ark",
+        "repo": "dnsseedrs",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib"
@@ -131,6 +147,7 @@
       "inputs": {
         "b10c-nix": "b10c-nix",
         "disko": "disko",
+        "dnsseedrs": "dnsseedrs",
         "flake-parts": "flake-parts",
         "forgejo-src": "forgejo-src",
         "niks3": "niks3",
