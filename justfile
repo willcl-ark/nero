@@ -159,11 +159,12 @@ guix-submit commit repository="":
     set -euo pipefail
     commit={{quote(commit)}}
     repository={{quote(repository)}}
+    repository=${repository:-https://github.com/bitcoin/bitcoin}
     if [[ ! $commit =~ ^[0-9a-f]{40}$ ]]; then
         echo "commit must be a full lowercase 40-character hash" >&2
         exit 2
     fi
-    submit=(/run/current-system/sw/bin/guix-bitcoin-submit)
+    submit=(GUIX_BITCOIN_REPOSITORY="$repository" /run/current-system/sw/bin/guix-bitcoin-submit)
     [[ -z $repository ]] || submit+=(--repository "$repository")
     submit+=("$commit")
     remote_command=$(printf '%q ' "${submit[@]}")
