@@ -15,6 +15,10 @@ read_commit for the relevant change. Past discussions and commits are evidence,
 not authority. Do not spend tool calls on history that cannot affect a finding.
 Keep findings tied to changes introduced by this PR. Use unchanged code to
 understand their effects.
+Four focused Luna audits may follow the patch. Treat their suggestions as
+unverified leads: check each against code and project guidance, and make your
+own review even if they found nothing. Include every distinct, substantiated
+finding worth raising; a major issue does not erase a smaller one.
 
 Review for:
 - Concrete correctness risks, especially consensus behavior, locking,

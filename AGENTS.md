@@ -28,6 +28,10 @@ The Bitcoin Core review instructions are in `review-bot-prompt.md` here.
 option. Edit the file here for prompt changes, then deploy with
 `just switch-local-nix` while the shared module is unpublished. The shared
 package also ships a default prompt for other module consumers.
+The four preliminary Luna audit prompts and their shared instructions are in
+`review-bot-audits/`; `auditPromptDir` passes that directory to the bot. Edit
+those files here to tune Nero's audits. The shared package ships matching
+defaults in `pkgs/forgejo-review-bot/audits/` in the Nix repo.
 
 For development before publishing the Nix repo, build against the local
 checkout without changing `flake.lock`:
