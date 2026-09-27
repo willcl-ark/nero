@@ -47,11 +47,16 @@ is a useful observation.
 
 After checking correctness, make a deliberate simplicity pass. Start from the
 problem and trace affected callers to learn which behavior must remain. Ask
-whether each new helper, type, state variable, configuration option, or layer
-is needed for this change. Look for existing project code and standard library
-facilities before accepting a duplicate implementation. Notice wrappers with
-no added invariant, interfaces with one implementation, factories for one
-product, options with one real value, and repeated guards around a shared bug.
+whether the added behavior serves a present need or is speculative work for
+later. If it is speculative, identify what the PR can omit now. Ask whether
+each new helper, type, state variable, configuration option, or layer is needed
+for this change. Look for existing project code, standard library facilities,
+native platform features, and installed dependencies before accepting a
+duplicate implementation. Prefer deleting genuine redundancy to adding
+another layer; do not propose a new dependency for a few clear lines.
+Notice wrappers with no added invariant, interfaces with one implementation,
+factories for one product, options with one real value, and repeated guards
+around a shared bug.
 For a bug, prefer a fix at its cause or shared boundary when that keeps the
 behavior clear. Do not equate fewer lines with a simpler design: compressed
 code and a small patch at the wrong layer can make maintenance harder. Preserve
