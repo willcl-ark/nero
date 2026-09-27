@@ -7,7 +7,7 @@
 +func reqReviewBotComment() func(ctx *context.APIContext) {
 +	return func(ctx *context.APIContext) {
 +		if ctx.Repo.IsGitHubMetadataMirror &&
-+			(ctx.Doer == nil || ctx.Doer.Name != "review-bot" || ctx.Repo.Repository.FullName() != "bitcoin/bitcoin") {
++			(ctx.Doer == nil || ctx.Doer.ID != 4 || ctx.Repo.Repository.FullName() != "bitcoin/bitcoin") {
 +			ctx.Error(http.StatusForbidden, "GitHubMetadataMirrorReadOnly", "GitHub metadata mirrors are read-only for issues and pulls")
 +		}
 +	}

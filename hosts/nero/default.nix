@@ -328,7 +328,7 @@ in
     openaiKeyFile = config.sops.secrets.openai-api-key.path;
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
-    botLogin = "review-bot";
+    botLogin = "ralph";
   };
 
   systemd.services.forgejo-review-bot = {
