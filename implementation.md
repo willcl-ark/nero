@@ -520,6 +520,77 @@
 - Derivation rooting is idempotent so an interrupted job can be requeued and
   resumed without treating its existing correct GC-root symlinks as errors.
 
+## Materialize derivation-closure outputs
+
+- Rooting top-level `.drv` paths keeps derivation metadata and allows the
+  worker to prewarm builder scripts and other non-derivation store references,
+  but it does not itself realize the output paths of source and build-input
+  derivations.
+- The manifest worker now walks `guix gc --requisites` for each top-level
+  derivation, filters that closure to `.drv` paths, runs a normal concrete
+  `guix build` for every derivation in that closure, and roots the realized
+  outputs under `<profile>.derivation-outputs`.
+- The output-root check follows Guix's `--root` layout: one output uses the
+  requested root path directly, while multi-output derivations use suffixed
+  roots beginning at `-0`. Existing correct roots are accepted so requeued jobs
+  remain resumable.
+- Prewarming still includes the profile runtime closure and top-level `.drv`
+  requisites, and now also includes the requisites of every rooted
+  derivation-closure output. This is what exposes source/check-out outputs such
+  as LLVM and glibc archives through `guix publish`.
+
+## Submit Bitcoin source revisions
+
+- Guix jobs now contain a small source descriptor instead of uploaded
+  manifests or a `contrib/guix` snapshot. The module fetches the named
+  repository, pins the accepted commit in its bare Git repository, and builds
+  from a server-owned detached worktree.
+- The normal nightly producer resolves the configured `bitcoin/bitcoin`
+  `master` branch. Manual jobs name an exact 40-character commit and may also
+  name an arbitrary fork repository; this is intentionally a trusted-operator
+  interface and does not have a repository allowlist.
+- Nero's Just recipes only invoke the installed module commands. No source
+  archive crosses SSH, and the obsolete Nero-local copies of the submitter,
+  nightly producer, and worker were removed.
+- The current module-level Guix time-machine URL and commit remain authoritative
+  for builds made today. If Bitcoin Core exposes those values in its own tree,
+  this interface should be replaced in one hard cutover rather than retaining
+  support for older Bitcoin commits.
+- Nero's `will-nix` lock remains unchanged until the local module commit is
+  pushed. The consumer changes are validated with a local input override and
+  must not be activated before the lock is advanced.
+- `just guix-queue` reports the worker state and the source repository, commit,
+  and submission time for queued and running jobs without evaluating descriptor
+  contents as shell code.
+- `just guix-worker-start` uses systemd's non-blocking start mode because the
+  worker is a long-running `Type=oneshot` build. This returns after the start is
+  queued while systemd continues to supervise the build.
+
+## Simplify Nero operator workflow and remove ARM maintenance lock
+
+- Kept `guix-submit-master` non-blocking by switching to
+  `systemctl start --no-block` in the Just recipe.
+- Removed ARM maintenance-lock handling from both lifecycle Nix wiring and the
+  ARM stop helper; the stop helper now gates shutdown only on the active-job
+  marker for safety.
+- Updated `just guix-queue` output to match current job metadata shape by
+  reporting only `source_repository` and `source_commit`.
+- Preserved ARM startup/shutdown safety checks: pre-flight job-name validation,
+  `guix offload test` readiness loop, active-file stop guard, and builder state
+  assertions.
+
+## Reproducible Guix publisher SSH identity
+
+- Nero's dedicated `guix copy` SSH identity is stored as a binary SOPS secret
+  and restored by sops-nix as root-owned, mode `0400` key material.
+- A Nix-managed root SSH configuration selects that identity for
+  `guix-publish-2`; this will be restored when Nero is reprovisioned.
+- The publisher's SSH host key must be pinned in the same configuration after
+  its fresh installation, because that key is generated during deployment.
+- The fresh publisher's Ed25519 host key is now pinned under both the Guix
+  copy alias and its DNS name. An activation script adds that one entry to
+  root's existing `known_hosts` without discarding unrelated host keys.
+
 ## Isolate Nero dnsseedrs egress through WireGuard
 
 - The public DNS listener remains in Nero's root network namespace. CoreDNS
@@ -538,3 +609,259 @@
   tunnel starts, including after a reboot. The Ubuntu egress VPS masquerades
   only the WireGuard tunnel addresses on `eth0`; Nero's other services
   continue to use their existing routes.
+
+## Update dnsseedrs mainnet capacity
+
+- Advanced the `will-nix` flake input to `willcl-ark/nix` commit `20e5c52`.
+- Set Nero's mainnet dnsseedrs crawler to 400 threads and a crawl rate of 40
+  starts per second. The upstream module calls the latter `crawlRate` and
+  emits dnsseedrs's `--crawl-rate=40` argument.
+
+## Pin the deployment to current dnsseedrs
+
+- Added `willcl-ark/dnsseedrs` as a non-flake source input pinned to commit
+  `791fb2e`. This lets the deployment build the upstream `default.nix` with its
+  existing nixpkgs input, without adding dnsseedrs's flake dependencies.
+- Both DNS seed hosts override the reusable module's package option with that
+  source build. The reusable `will-nix` service module remains responsible for
+  the service interface and runtime configuration.
+
+## Pass the selected repository to Guix submission
+
+- Resolve the recipe's omitted repository argument to the upstream Bitcoin Core
+  URL and set `GUIX_BITCOIN_REPOSITORY` in the remote command. This satisfies
+  the locked submission wrapper's required default while keeping explicit
+  `--repository` submissions working.
+
+## Enable Forgejo webhooks
+
+- Removed the shared `forgejo-site` module's `DISABLE_WEBHOOKS = true` setting.
+  Forgejo defaults this option to `false`, so a host-specific override is not
+  needed.
+- Pinned Nero's `will-nix` input to `051f3c9` and switched the host to that
+  revision. The resulting configuration omits `DISABLE_WEBHOOKS`; Forgejo
+  restarted successfully and answered HTTP requests on its local listener.
+
+## Add a Forgejo review bot
+
+- Added a Python service on Nero behind `review.fish.foo`. It accepts only signed
+  pull request webhooks for `bitcoin/bitcoin` and keeps its checkout under
+  `/var/lib/forgejo-review-bot`.
+- The bot fetches the target branch and `refs/pull/<number>/head` from the fixed
+  Forgejo origin, checks the webhook head SHA, and reviews the merge-base diff
+  plus commit messages. The fetch requests a blob filter because the mirrored
+  Bitcoin repository has a large history. It skips oversized review inputs
+  rather than sending an incomplete patch to the model.
+- The OpenAI key, a separate generated webhook secret, and the dedicated
+  `review-bot` account token are SOPS secrets owned by the service user. The
+  model request uses `gpt-6-sol` with `store: false`.
+- The bot posts one issue comment per PR, identified by bot author and a hidden
+  marker. Later reviews edit that comment only when its body changes. It checks
+  the current Git PR head before posting so stale webhooks cannot publish.
+- A live mirror webhook and model request remain to be tested after deployment.
+  The issue comment API and Git PR ref work with the bot token. The PR API is
+  unavailable with the token's issue-only scope, so the bot does not use it.
+- Extended the review with Responses API function tools for reading numbered
+  chunks of tracked regular files and literal searches at the checked-out PR
+  head. The model chooses its own reads to follow definitions and callers.
+  Tool results and model output are replayed for each request with `store: false`.
+  Reads are bounded to 1 MB files, 12 KB outputs, 12 calls, and eight model
+  turns. No model tool executes PR code; the only subprocesses are fixed Git
+  commands. CI remains responsible for builds and tests.
+- Caddy obtained a certificate for `review.fish.foo`, and an unsigned HTTPS
+  webhook request returned 401 through the live service. We will wait for an
+  organic PR event rather than send a synthetic one.
+- Synced the contextual reviewer to Nero and switched the system configuration.
+  The service and Caddy are active; systemd has `Restart=on-failure`. The public
+  endpoint still rejects unsigned POST requests with 401. No PR review or
+  OpenAI model call was triggered during deployment.
+- Removed the bot's special `@` mention scan and comment section, leaving that
+  static check to other tools. Added a short writing guide distilled from the
+  local unslop skill to the model prompt: plain, specific, active prose without
+  stock praise, filler, inflated phrasing, decorative formatting, or em dashes.
+- Deployed the style change on Nero after all 14 local tests passed. The new
+  `forgejo-review-bot` service is active with zero restarts, and an unsigned
+  HTTPS webhook still returns 401. The first organic review remains pending.
+- Added a collapsed public debug section to new bot comments for development.
+  It records the review input size and hash, exact bot instructions, each API
+  turn's request and response hashes, status, model, latency, token counts,
+  chosen tool calls, and an estimated USD cost. It omits credentials, patch
+  text, and retrieved file contents. Forgejo's Markdown renderer preserved a
+  trial `<details>` block. The estimate uses published `gpt-6-sol` Standard
+  rates, including cached and cache-write tokens when usage reports them.
+- Deployed the debug comment change on Nero. All 15 local tests passed, the
+  NixOS build and switch succeeded, and the bot is active with zero restarts.
+  The public endpoint rejects an unsigned POST with 401. The first organic PR
+  webhook will validate the full model and comment path.
+- A manual signed webhook for open PR #36321 reached the bot, and its model
+  requests completed, but Forgejo rejected the comment POST with 403. The
+  custom Forgejo fork intentionally makes GitHub metadata mirrors read-only for
+  issues and pulls. Added a deployment patch that allows only `review-bot` to
+  use the canonical issue-comment POST and PATCH API routes on `bitcoin/bitcoin`;
+  other mirror mutations remain blocked. The importer only inserts source-mapped
+  upstream comments, so local bot comments should survive metadata sync.
+- Added an ignored local `scripts/review-pr-local` helper and `just review-pr`
+  recipe. It takes one PR number, checks the upstream PR and mirrored head,
+  reads the webhook secret from SOPS at run time, and sends a signed event.
+- Built and switched Nero with the Forgejo patch. A `just review-pr 36321`
+  trigger created comment 607583 from `review-bot` on the existing PR, with
+  the expected head and collapsed debug details. The model used 10 repository
+  tools across seven API turns and reported no actionable issue; the trace's
+  cost estimate was $0.037451. Repeating the command logged "head already
+  reviewed" and did not create another comment. Forgejo, Caddy, and the bot
+  remain active with zero restarts.
+
+## Improve review context and judgment
+
+- The first two comments were technically plausible but too checklist-like.
+  In particular, the comment on PR #36321 claimed existing checkpoint tests
+  covered the change, although the observed requests do not reach the empty
+  vector condition that triggered the sanitizer warning.
+- Fetch the latest PR title and description from Forgejo's issue API and
+  confirm its `pull_request` field. The mirror's pull request API returns 404
+  even with a token that can read the repository. Git still checks the head
+  SHA against the webhook before review. The comment does not repeat the title
+  or description by default. The existing 200 KB input cap includes this text.
+- The prompt now asks for a short judgment of the problem, root cause, code
+  placement, and material tradeoffs before implementation details. It requires
+  evidence for test-coverage claims and avoids routine checklist reassurance.
+  It still forbids running PR code and giving a human-style ACK.
+- A replacement token scoped to `bitcoin/bitcoin` with `write:issue` and
+  `read:repository` was installed in SOPS. This implementation needs only
+  `write:issue`; the additional read scope is not used by the review path.
+- The mirror ignores `page` and `limit` for issue comments: PR #25665 returned
+  the same 65 comments for pages 1, 2, 3, and 10. The old lookup looped over
+  thousands of identical pages and eventually got HTTP 401 after the previous
+  token was rotated. Stop when a page repeats, while preserving normal
+  pagination. A regression test fails before the fix and passes afterward.
+- Deployed the context prompt, encrypted token rotation, and pagination fix
+  with NixOS switches. The bot service is active with zero restarts, and an
+  unsigned webhook still returns 401. Re-triggering open PR #25665 created
+  exactly one bot comment, ID 607585. It identified a real caller error in
+  `src/kernel/bitcoinkernel.cpp`: the verify-failure log reads `load_result`
+  instead of `verify_result`. The PR diff confirms the cited line.
+- Added a short simplicity check distilled from the local ponytail skill to the
+  existing model pass. The bot may suggest removing unnecessary helpers, types,
+  state, or layers only when it can give a concrete alternative and account for
+  behavior, errors, locking, consensus, and API contracts. It stays silent when
+  it has no supported simplification. This keeps one model pass and one comment.
+- Expanded the simplicity pass after feedback: it now asks the reviewer to
+  trace the problem and callers, look for project or standard-library reuse,
+  identify narrow abstractions and unused options, and prefer root-cause fixes
+  at shared boundaries. It explicitly guards consensus, locking, serialization,
+  errors, public contracts, and regression tests, and requires a concrete
+  replacement before suggesting simplification.
+- Committed as `2378e78` and switched Nero. All 17 local tests passed; the
+  review service is active with zero restarts, and an unsigned webhook still
+  returns 401. Existing reviews on unchanged heads are not rerun; the next
+  new or updated PR will use the expanded prompt.
+- Compared the live simplicity prompt with the upstream Ponytail skill. Added
+  its useful checks for speculative behavior, native platform features,
+  installed dependencies, and deleting redundant code. Kept the requirement
+  for a concrete, behavior-preserving suggestion and the Bitcoin Core safety
+  constraints. This remains one review pass and one editable PR comment.
+
+## Move the review bot into the shared Nix flake
+
+- The shared `/home/will/src/nix` flake now owns the bot source, tests, package,
+  and `services.forgejoReviewBot` module. Nero keeps only its repository URL,
+  reverse proxy, SOPS secret paths, and service ordering for decrypted secrets.
+- The module preserves the `forgejo-review-bot` system user and the private
+  `/var/lib/forgejo-review-bot` StateDirectory, so the existing checkout and
+  comment state survive the service cutover. The runtime API URL and marker are
+  derived from Nero's repository configuration; the marker remains unchanged.
+- `just switch-local-nix` syncs the local shared flake to Nero and passes a
+  temporary `will-nix` override. This avoids pushing development changes and
+  does not rewrite `flake.lock`. A normal switch requires the shared module to
+  be published and the `will-nix` input pin updated first.
+- The unrelated DNS seed edits in `flake.lock` and the top of
+  `hosts/nero/default.nix` remain outside the review bot commits.
+- Shared module committed as `1c2fcd4`; Nero cutover committed as `fd38d56`.
+  All 19 bot unit tests pass, the shared Nix package builds, and local Nero
+  evaluation succeeds with `--override-input will-nix path:/home/will/src/nix`.
+- The first `just switch-local-nix` attempt stopped before sync because the
+  system SSH drop-in is rejected for its permissions. Updated the relevant
+  switch recipes to use `/home/will/.ssh/config` and committed as `05d3f5b`.
+  The retry switched Nero successfully. The service runs the package binary,
+  is active with zero restarts, retains its 0700 checkout state directory, and
+  returns 401 for an unsigned webhook. The shared input remains an unpublished
+  local override; a normal pinned switch needs the shared module published and
+  `nix flake update will-nix` first.
+
+## Improve review logs and make the prompt editable here
+
+- The shared bot now logs validated PR number, action, and short head on
+  enqueue and start. One terminal line records outcome, elapsed time, model
+  turns, tool calls, token totals, and estimated cost when available. Failures
+  add a fixed stage, exception type, and HTTP status/host without exception
+  messages or PR content. Browser GET request lines are DEBUG rather than INFO.
+- The worker catches ordinary unexpected job exceptions and continues to later
+  jobs. The cost total uses the same calculation as the per-comment debug
+  section. Shared commit `d9f2c57` passed bot tests and package checks and was
+  switched on Nero. A same-head manual webhook for PR #36328 logged enqueue,
+  start, and `already-reviewed` with zero model turns and zero tools; no new
+  review was generated.
+- The prompt was formerly embedded in the shared Python file. Shared commit
+  `2599f50` ships that exact text as the package default and adds the module's
+  `promptFile` option. Nero commit `24f24ef` supplies an identical
+  `review-bot-prompt.md` so Bitcoin Core wording can be edited here. The host
+  evaluates with the override and was switched using `just switch-local-nix`.
+  All 25 bot tests pass; the service is active with zero restarts and reads
+  Nero's prompt from a Nix store path. An unsigned webhook still returns 401.
+
+## Shorten the Bitcoin Core review prompt
+
+- The host override prompt now keeps the bot's read-only context inspection,
+  conceptual and correctness review, deliberate simplicity pass, and concise
+  comment style in 318 words instead of 495.
+- Nero now uses the revised prompt. The shared module commits through
+  `2599f50` were published, the `will-nix` pin was updated in `4df097b`,
+  and `just switch` deployed the current working tree. The active unit points
+  to a Nix store prompt whose hash matches the local file.
+- A follow-up sentence limits findings to changes introduced by the PR while
+  allowing unchanged files as context. This came from the public Codex Action
+  example and does not change the bot's checkout behavior.
+- The service restarted with zero restarts and reviewed PR #36358 after the
+  switch: 4 model turns, 15 tool calls, and a created comment. Both DNS seed
+  services also remained active after deploying the uncommitted seed edits.
+
+## Label review findings by severity
+
+- The prompt now groups findings under Critical, Major, Minor, or Suggestion
+  headings with a single matching emoji. Only levels with findings appear.
+  Reviews without findings remain brief prose without a severity label.
+- The model still produces one editable PR comment, and the application still
+  supplies the base/head header and debug section. No bot code changed.
+- This prompt edit is local and has not been switched on Nero.
+
+## Reduce review banner and increase inspection budget
+
+- The shared bot comment wrapper now starts with Base and Head commit IDs,
+  followed by the model's concise review. It keeps the hidden ownership marker
+  and the requested collapsible debug trace.
+- The model remains gpt-6-sol at default medium reasoning. The tool limit rises
+  from 12 to 24 calls, model turns from 8 to 10, and the per-response generated
+  token cap from 3,000 to 6,000. The larger cap gives reasoning and tool calls
+  room; it does not request a longer public comment or set a fixed spend. This
+  setting aims for roughly $1-$2 on demanding reviews, but an exact dollar
+  ceiling would require metered stopping.
+- The new comment-format regression test failed before the edit, then all 26
+  bot unit tests passed. These shared changes have not been published or
+  switched on Nero.
+
+## Add bounded inspection tools and forced reruns
+
+- The bot can now find tracked paths, read regular files at the PR merge base,
+  and page through a changed file's diff. For patches over 200 KB, it sends a
+  changed-file list and lets the model select diffs instead of skipping the PR.
+- The signed `review_bot_force` webhook field bypasses only the same-head
+  precheck. The existing stale-head check and single-comment edit path remain.
+  The ignored local helper accepts `just review-pr NUMBER --force` and signs
+  that field into its synthetic webhook request.
+- The shared changes were split into commits `73ba907` and `054d2fa`. Bot
+  tests, package build, flake evaluation, and a mocked helper call passed.
+- The first forced PR #36182 run passed model review but failed publication
+  because the token and old marked comment belong to renamed account `ralph`,
+  while the bot expected `review-bot`. After updating that setting, Forgejo
+  still returned 403: the site patch also hardcoded the old login. Account ID
+  4 owns both the token and comment, so the patch now checks that stable ID.
