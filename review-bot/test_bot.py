@@ -260,6 +260,19 @@ class BotTests(unittest.TestCase):
                 bot.find_comment("token", 42, "review-bot")
         self.assertEqual(request.call_count, 1)
 
+    def test_find_comment_stops_when_mirror_ignores_page(self):
+        comments = [{"id": i, "user": {"login": "someone-else"}, "body": ""}
+                    for i in range(65)]
+
+        def request(token, path):
+            if "page=3" in path:
+                self.fail("Repeated mirror page caused another request")
+            return comments
+
+        with patch.object(bot, "forgejo_request", side_effect=request) as get:
+            self.assertIsNone(bot.find_comment("token", 42, "review-bot"))
+        self.assertEqual(get.call_count, 2)
+
     def test_publish_finds_comment_on_later_page(self):
         existing = {"id": 73, "user": {"login": "review-bot"},
                     "body": bot.COMMENT_MARKER + "\nOld review"}

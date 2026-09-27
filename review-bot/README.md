@@ -24,8 +24,8 @@ python3 bot.py --listen 127.0.0.1 --port 8765 \
 The Forgejo token must belong to `--bot-login`, be restricted to
 `bitcoin/bitcoin`, and have `write:issue` for comments and PR metadata. The
 service finds its comment using both the account name and a hidden marker.
-It searches all comment pages before creating one, and ignores a matching
-marker written by another account.
+It searches comment pages before creating one, stops if the mirror repeats a
+page, and ignores a matching marker written by another account.
 
 Set the Forgejo webhook to `POST` JSON to
 `https://YOUR_HOST/webhooks/forgejo`. Set a long random secret in Forgejo and

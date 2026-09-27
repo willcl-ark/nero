@@ -322,20 +322,26 @@ def pull_request_context(token, number):
 def find_comment(token, number, bot_login):
     page = 1
     marker_from_other_user = False
+    seen_pages = set()
     while True:
         comments = forgejo_request(token, f"/issues/{number}/comments?limit=50&page={page}")
         if not isinstance(comments, list):
             raise ValueError("Forgejo returned invalid comments")
+        ids = tuple(comment.get("id") for comment in comments)
+        if ids in seen_pages:
+            break
+        seen_pages.add(ids)
         for comment in comments:
             if COMMENT_MARKER in comment.get("body", ""):
                 if comment.get("user", {}).get("login") == bot_login:
                     return comment
                 marker_from_other_user = True
         if len(comments) < 50:
-            if marker_from_other_user:
-                raise ValueError("Review marker belongs to another user")
-            return None
+            break
         page += 1
+    if marker_from_other_user:
+        raise ValueError("Review marker belongs to another user")
+    return None
 
 
 def current_head(number):
