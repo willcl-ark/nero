@@ -2,6 +2,7 @@
   config,
   lib,
   options,
+  pkgs,
   ...
 }:
 let
@@ -71,6 +72,16 @@ in
   sops.secrets.github-metadata-backup-forgejo-token = {
     owner = "gmb-bitcoin";
     group = "github-metadata";
+    mode = "0400";
+  };
+
+  sops.secrets.openai-api-key = {
+    owner = "forgejo-review-bot";
+    mode = "0400";
+  };
+
+  sops.secrets.forgejo-review-bot-webhook-secret = {
+    owner = "forgejo-review-bot";
     mode = "0400";
   };
 
@@ -297,6 +308,37 @@ in
       file_server browse
     }
   '';
+
+  services.caddy.virtualHosts."review.fish.foo".extraConfig = ''
+    reverse_proxy 127.0.0.1:8765
+  '';
+
+  users.users.forgejo-review-bot = {
+    isSystemUser = true;
+    group = "forgejo-review-bot";
+  };
+  users.groups.forgejo-review-bot = { };
+
+  systemd.services.forgejo-review-bot = {
+    description = "Forgejo pull request review bot";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" "sops-install-secrets.service" ];
+    wants = [ "network-online.target" "sops-install-secrets.service" ];
+    path = [ pkgs.git ];
+    serviceConfig = {
+      User = "forgejo-review-bot";
+      Group = "forgejo-review-bot";
+      StateDirectory = "forgejo-review-bot";
+      StateDirectoryMode = "0700";
+      WorkingDirectory = "/var/lib/forgejo-review-bot";
+      ExecStart = "${pkgs.python3}/bin/python3 ${../../review-bot/bot.py} --listen 127.0.0.1 --port 8765 --state-dir /var/lib/forgejo-review-bot --openai-key-file ${config.sops.secrets.openai-api-key.path} --webhook-secret-file ${config.sops.secrets.forgejo-review-bot-webhook-secret.path}";
+      Restart = "on-failure";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+    };
+  };
 
   systemd.services.radicle-node = {
     after = [ "sops-install-secrets.service" ];
