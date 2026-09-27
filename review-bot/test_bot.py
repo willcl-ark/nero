@@ -72,7 +72,8 @@ class BotTests(unittest.TestCase):
     def test_collect_review_skips_stale_head_without_model_call(self):
         outputs = iter(["", "b" * 40, "c" * 40])
         with patch.object(bot, "prepare_checkout"), patch.object(bot, "git", side_effect=lambda *a: next(outputs)):
-            base, head, review, skip = bot.collect_review(Path("/unused"), 42, "master", "a" * 40)
+            base, head, review, skip = bot.collect_review(
+                Path("/unused"), 42, "master", "a" * 40, "Title", "Description")
         self.assertEqual((base, head, review), ("c" * 40, "b" * 40, None))
         self.assertIn("changed", skip)
 
@@ -95,12 +96,26 @@ class BotTests(unittest.TestCase):
             return ""
 
         with patch.object(bot, "prepare_checkout"), patch.object(bot, "git", side_effect=fake_git):
-            result = bot.collect_review(Path("/unused"), 42, "master", head)
+            result = bot.collect_review(Path("/unused"), 42, "master", head,
+                                        "PR title", "Why this change is needed")
         self.assertEqual(result[0:2], (base, head))
         self.assertIn("+change", result[2])
         self.assertEqual(len(result), 4)
         self.assertIn("Explain the commit rationale", result[2])
+        self.assertIn("PR title: PR title", result[2])
+        self.assertIn("PR description:\nWhy this change is needed", result[2])
         self.assertIn(("diff", "--no-ext-diff", "--binary", f"{merge_base}..{head}"), calls)
+
+    def test_fetch_pr_context_from_mirrored_issue(self):
+        issue = {"number": 42, "pull_request": {"html_url": "https://example.invalid/pulls/42"},
+                 "title": "Fix sanitizer warning", "body": "Reproduced with an empty vector"}
+        with patch.object(bot, "forgejo_request", return_value=issue) as request:
+            self.assertEqual(bot.pull_request_context("token", 42),
+                             (issue["title"], issue["body"]))
+            issue["pull_request"] = None
+            with self.assertRaisesRegex(ValueError, "invalid pull request"):
+                bot.pull_request_context("token", 42)
+        request.assert_called_with("token", "/issues/42")
 
     def test_openai_request_disables_storage(self):
         class Response:
