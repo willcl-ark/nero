@@ -120,11 +120,20 @@ class BotTests(unittest.TestCase):
         self.assertIs(sent["store"], False)
         self.assertEqual(sent["model"], "gpt-6-sol")
 
-    def test_draft_records_shas(self):
+    def test_new_head_replaces_single_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = bot.write_draft(Path(tmp), 42, "b" * 40, "a" * 40, "No findings.")
+            state = Path(tmp)
+            path = bot.write_draft(state, 42, "b" * 40, "a" * 40, "First review.")
+            self.assertEqual(path.name, "pr-42.md")
+            self.assertTrue(bot.draft_matches_head(state, 42, "a" * 40))
+            self.assertFalse(bot.draft_matches_head(state, 42, "c" * 40))
+            replacement = bot.write_draft(state, 42, "b" * 40, "c" * 40, "New review.")
+            self.assertEqual(replacement, path)
+            self.assertFalse(bot.draft_matches_head(state, 42, "a" * 40))
+            self.assertTrue(bot.draft_matches_head(state, 42, "c" * 40))
             self.assertIn("Base: `" + "b" * 40 + "`", path.read_text())
-            self.assertIn("No findings.", path.read_text())
+            self.assertIn("New review.", path.read_text())
+            self.assertNotIn("First review.", path.read_text())
 
 
 if __name__ == "__main__":

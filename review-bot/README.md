@@ -3,8 +3,9 @@
 This small service accepts Forgejo `pull_request` webhooks for
 `https://git.fish.foo/bitcoin/bitcoin`. It fetches the base branch and PR head
 from that fixed origin, checks out the head in its own directory, and reviews
-the full PR diff and commit messages. It writes Markdown drafts under
-`STATE_DIR/drafts`. It never posts to Forgejo or runs PR code.
+the full PR diff and commit messages. It writes one Markdown draft per PR at
+`STATE_DIR/drafts/pr-NUMBER.md`, replacing it when the head changes. It never
+posts to Forgejo or runs PR code.
 
 Run with Python 3.9 or newer and Git:
 
@@ -24,9 +25,14 @@ validates `X-Forgejo-Signature` against the raw body before parsing JSON.
 
 The bot skips a review when the fetched head no longer matches the webhook
 head or when the diff and commit messages exceed 200,000 bytes. These skips
-get a local draft explaining why. Existing drafts prevent repeated API calls
-for the same PR head. A failed fetch or API call is logged without
+get a local draft explaining why. A draft for the current head prevents
+repeated API calls. A stale-head delivery creates no draft. A failed fetch or
+API call is logged without
 including keys or patch content. Each request uses `gpt-6-sol` with
 `store: false` and no tools.
+
+When publishing is added, keep one bot-owned issue comment per PR. Find it by
+author and a stable marker, create it if absent, and edit it only when the
+review body changes. The current service has no Forgejo write credential.
 
 Run local tests with `python3 -m unittest discover -s review-bot -p 'test_*.py'`.

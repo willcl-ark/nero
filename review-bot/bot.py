@@ -127,10 +127,15 @@ def openai_review(api_key, review):
 def write_draft(state_dir, number, base_sha, head_sha, content):
     drafts = state_dir / "drafts"
     drafts.mkdir(parents=True, exist_ok=True)
-    path = drafts / f"pr-{number}-{head_sha}.md"
+    path = drafts / f"pr-{number}.md"
     path.write_text(f"# Draft review for PR #{number}\n\nBase: `{base_sha}`  \n"
                     f"Head: `{head_sha}`\n\n{content}\n")
     return path
+
+
+def draft_matches_head(state_dir, number, head_sha):
+    path = state_dir / "drafts" / f"pr-{number}.md"
+    return path.exists() and f"Head: `{head_sha}`" in path.read_text().splitlines()[:5]
 
 
 def worker(jobs, state_dir, api_key):
@@ -138,10 +143,12 @@ def worker(jobs, state_dir, api_key):
     while True:
         number, base_ref, expected_head = jobs.get()
         try:
-            if (state_dir / "drafts" / f"pr-{number}-{expected_head}.md").exists():
+            if draft_matches_head(state_dir, number, expected_head):
                 continue
             base_sha, head_sha, review, skip, at_mentions = collect_review(
                 checkout, number, base_ref, expected_head)
+            if head_sha != expected_head:
+                continue
             content = f"Skipped: {skip}" if skip else openai_review(api_key, review)
             if at_mentions:
                 content = ("## Commit message check\n\nRemove the `@` mention in: "
