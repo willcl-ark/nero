@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import importlib.util
 import json
-import tempfile
 import threading
 import unittest
 import urllib.error
@@ -120,20 +119,114 @@ class BotTests(unittest.TestCase):
         self.assertIs(sent["store"], False)
         self.assertEqual(sent["model"], "gpt-6-sol")
 
-    def test_new_head_replaces_single_draft(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = Path(tmp)
-            path = bot.write_draft(state, 42, "b" * 40, "a" * 40, "First review.")
-            self.assertEqual(path.name, "pr-42.md")
-            self.assertTrue(bot.draft_matches_head(state, 42, "a" * 40))
-            self.assertFalse(bot.draft_matches_head(state, 42, "c" * 40))
-            replacement = bot.write_draft(state, 42, "b" * 40, "c" * 40, "New review.")
-            self.assertEqual(replacement, path)
-            self.assertFalse(bot.draft_matches_head(state, 42, "a" * 40))
-            self.assertTrue(bot.draft_matches_head(state, 42, "c" * 40))
-            self.assertIn("Base: `" + "b" * 40 + "`", path.read_text())
-            self.assertIn("New review.", path.read_text())
-            self.assertNotIn("First review.", path.read_text())
+    def test_publish_creates_then_edits_one_bot_comment(self):
+        comments = [{"id": 1, "user": {"login": "someone-else"},
+                     "body": "Unrelated comment"}]
+        calls = []
+
+        def request(token, path, method="GET", data=None):
+            calls.append((path, method, data))
+            if path == "/issues/42/comments?limit=50&page=1":
+                return comments
+            if method == "POST":
+                comments.append({"id": 2, "user": {"login": "review-bot"},
+                                 "body": data["body"]})
+                return comments[-1]
+            if method == "PATCH":
+                comments[-1]["body"] = data["body"]
+                return comments[-1]
+            self.fail(f"Unexpected API call {path}")
+
+        with patch.object(bot, "forgejo_request", side_effect=request), \
+                patch.object(bot, "current_head", return_value="a" * 40):
+            args = ("token", 42, "review-bot", "b" * 40, "a" * 40)
+            self.assertEqual(bot.publish_review(*args, "First review."), "created")
+            self.assertEqual(bot.publish_review(*args, "First review."), "unchanged")
+            self.assertEqual(bot.publish_review(*args, "Updated review."), "updated")
+        self.assertEqual([method for _, method, _ in calls if method != "GET"],
+                         ["POST", "PATCH"])
+        self.assertEqual(comments[-1]["id"], 2)
+        self.assertIn("Updated review.", comments[-1]["body"])
+
+    def test_foreign_marker_prevents_duplicate_comment(self):
+        with patch.object(bot, "forgejo_request", return_value=[
+            {"id": 1, "user": {"login": "someone-else"},
+             "body": bot.COMMENT_MARKER}]) as request:
+            with self.assertRaisesRegex(ValueError, "another user"):
+                bot.find_comment("token", 42, "review-bot")
+        self.assertEqual(request.call_count, 1)
+
+    def test_publish_finds_comment_on_later_page(self):
+        existing = {"id": 73, "user": {"login": "review-bot"},
+                    "body": bot.COMMENT_MARKER + "\nOld review"}
+        calls = []
+
+        def request(token, path, method="GET", data=None):
+            calls.append((path, method))
+            if "page=1" in path:
+                return [{"user": {"login": "someone-else"},
+                         "body": bot.COMMENT_MARKER}] * 50
+            if "page=2" in path:
+                return [existing]
+            if method == "PATCH":
+                return {"id": 73}
+            self.fail(f"Unexpected API call {path}")
+
+        with patch.object(bot, "forgejo_request", side_effect=request), \
+                patch.object(bot, "current_head", return_value="a" * 40):
+            self.assertEqual(bot.publish_review("token", 42, "review-bot",
+                                                "b" * 40, "a" * 40, "Review"),
+                             "updated")
+        self.assertIn(("/issues/comments/73", "PATCH"), calls)
+
+    def test_stale_head_does_not_publish(self):
+        calls = []
+
+        def request(token, path, method="GET", data=None):
+            calls.append((path, method))
+            if path.startswith("/issues/42/comments"):
+                return []
+            self.fail(f"Unexpected API call {path}")
+
+        with patch.object(bot, "forgejo_request", side_effect=request), \
+                patch.object(bot, "current_head", return_value="c" * 40):
+            self.assertEqual(bot.publish_review("token", 42, "review-bot",
+                                                "b" * 40, "a" * 40, "Review"),
+                             "stale")
+        self.assertTrue(all(method == "GET" for _, method in calls))
+
+    def test_current_head_reads_fixed_git_ref(self):
+        class Result:
+            stdout = "a" * 40 + "\trefs/pull/42/head\n"
+
+        with patch.object(bot.subprocess, "run", return_value=Result()) as run:
+            self.assertEqual(bot.current_head(42), "a" * 40)
+        self.assertEqual(run.call_args.args[0],
+                         ["git", "ls-remote", bot.ORIGIN, "refs/pull/42/head"])
+
+    def test_repeated_head_skips_model_call(self):
+        class OneJob:
+            def __init__(self):
+                self.calls = 0
+
+            def get(self):
+                self.calls += 1
+                if self.calls == 1:
+                    return 42, "master", "a" * 40
+                raise StopIteration
+
+            def task_done(self):
+                pass
+
+        existing = {"body": bot.review_body("b" * 40, "a" * 40, "Reviewed.")}
+        with patch.object(bot, "find_comment", return_value=existing), \
+                patch.object(bot, "collect_review") as collect, \
+                patch.object(bot, "openai_review") as model:
+            with self.assertRaises(StopIteration):
+                bot.worker(OneJob(), Path("/unused"), "openai-key", "forgejo-token",
+                           "review-bot")
+        collect.assert_not_called()
+        model.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local draft reviews for pull request webhooks from bitcoin/bitcoin."""
+"""Publish first-pass reviews for pull request webhooks from bitcoin/bitcoin."""
 
 import argparse
 import hashlib
@@ -18,6 +18,8 @@ from pathlib import Path
 
 ORIGIN = "https://git.fish.foo/bitcoin/bitcoin.git"
 REPOSITORY = "bitcoin/bitcoin"
+FORGEJO_API = "https://git.fish.foo/api/v1/repos/bitcoin/bitcoin"
+COMMENT_MARKER = "<!-- forgejo-review-bot:bitcoin/bitcoin -->"
 MAX_BODY = 1024 * 1024
 MAX_REVIEW_BYTES = 200_000
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -29,7 +31,7 @@ actionable issues, or say that you found none. Check whether the changes stay
 focused; whether behavior changes need tests, documentation, or release notes;
 and whether commits are atomic and explain their rationale. Do not claim a
 commit builds or tests successfully from a patch alone. Avoid speculative
-comments. Write a concise Markdown draft for a human to inspect."""
+comments. Write a concise Markdown review for the pull request."""
 
 
 def valid_signature(body, header, secret):
@@ -124,26 +126,86 @@ def openai_review(api_key, review):
     return text
 
 
-def write_draft(state_dir, number, base_sha, head_sha, content):
-    drafts = state_dir / "drafts"
-    drafts.mkdir(parents=True, exist_ok=True)
-    path = drafts / f"pr-{number}.md"
-    path.write_text(f"# Draft review for PR #{number}\n\nBase: `{base_sha}`  \n"
-                    f"Head: `{head_sha}`\n\n{content}\n")
-    return path
+def forgejo_request(token, path, method="GET", data=None):
+    headers = {"Authorization": f"token {token}", "Accept": "application/json",
+               "User-Agent": "ForgejoReviewBot/1.0"}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(
+        f"{FORGEJO_API}{path}",
+        data=json.dumps(data).encode() if data is not None else None,
+        headers=headers, method=method,
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.load(response)
 
 
-def draft_matches_head(state_dir, number, head_sha):
-    path = state_dir / "drafts" / f"pr-{number}.md"
-    return path.exists() and f"Head: `{head_sha}`" in path.read_text().splitlines()[:5]
+def find_comment(token, number, bot_login):
+    page = 1
+    marker_from_other_user = False
+    while True:
+        comments = forgejo_request(token, f"/issues/{number}/comments?limit=50&page={page}")
+        if not isinstance(comments, list):
+            raise ValueError("Forgejo returned invalid comments")
+        for comment in comments:
+            if COMMENT_MARKER in comment.get("body", ""):
+                if comment.get("user", {}).get("login") == bot_login:
+                    return comment
+                marker_from_other_user = True
+        if len(comments) < 50:
+            if marker_from_other_user:
+                raise ValueError("Review marker belongs to another user")
+            return None
+        page += 1
 
 
-def worker(jobs, state_dir, api_key):
+def current_head(number):
+    result = subprocess.run(
+        ["git", "ls-remote", ORIGIN, f"refs/pull/{number}/head"],
+        check=True, capture_output=True, text=True, timeout=180,
+    ).stdout.strip()
+    fields = result.split()
+    if len(fields) != 2 or not SHA.fullmatch(fields[0]) or fields[1] != f"refs/pull/{number}/head":
+        raise ValueError("Git returned invalid PR head")
+    return fields[0]
+
+
+def review_body(base_sha, head_sha, content):
+    return (f"{COMMENT_MARKER}\n"
+            f"First-pass review\n\nBase: `{base_sha}`  \nHead: `{head_sha}`\n\n"
+            f"{content.strip()}\n")
+
+
+def comment_matches_head(comment, head_sha):
+    return (comment is not None
+            and f"Head: `{head_sha}`" in comment.get("body", "").splitlines()[:5])
+
+
+def publish_review(token, number, bot_login, base_sha, head_sha, content):
+    body = review_body(base_sha, head_sha, content)
+    comment = find_comment(token, number, bot_login)
+    # Check as close as possible to publication, after paginating old comments.
+    if current_head(number) != head_sha:
+        return "stale"
+    if comment is None:
+        created = forgejo_request(token, f"/issues/{number}/comments", "POST", {"body": body})
+        if created.get("user", {}).get("login") != bot_login:
+            raise ValueError("Forgejo token does not belong to bot account")
+        return "created"
+    if comment.get("body") == body:
+        return "unchanged"
+    forgejo_request(token, f"/issues/comments/{comment['id']}", "PATCH", {"body": body})
+    return "updated"
+
+
+def worker(jobs, state_dir, api_key, forgejo_token, bot_login):
     checkout = state_dir / "checkout"
     while True:
         number, base_ref, expected_head = jobs.get()
         try:
-            if draft_matches_head(state_dir, number, expected_head):
+            if comment_matches_head(find_comment(forgejo_token, number, bot_login),
+                                    expected_head):
+                logging.info("PR #%d head already reviewed", number)
                 continue
             base_sha, head_sha, review, skip, at_mentions = collect_review(
                 checkout, number, base_ref, expected_head)
@@ -154,8 +216,9 @@ def worker(jobs, state_dir, api_key):
                 content = ("## Commit message check\n\nRemove the `@` mention in: "
                            + ", ".join(f"`{subject}`" for subject in at_mentions)
                            + "\n\n" + content)
-            path = write_draft(state_dir, number, base_sha, head_sha, content)
-            logging.info("Wrote draft %s", path)
+            result = publish_review(forgejo_token, number, bot_login,
+                                    base_sha, head_sha, content)
+            logging.info("PR #%d review %s", number, result)
         except (OSError, ValueError, subprocess.CalledProcessError,
                 subprocess.TimeoutExpired, urllib.error.URLError) as exc:
             logging.error("Review failed for PR #%d: %s", number, type(exc).__name__)
@@ -200,14 +263,18 @@ def main():
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--openai-key-file", type=Path, required=True)
     parser.add_argument("--webhook-secret-file", type=Path, required=True)
+    parser.add_argument("--forgejo-token-file", type=Path, required=True)
+    parser.add_argument("--bot-login", required=True)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     api_key = args.openai_key_file.read_text().strip()
     secret = args.webhook_secret_file.read_bytes().strip()
-    if not api_key or not secret:
+    forgejo_token = args.forgejo_token_file.read_text().strip()
+    if not api_key or not secret or not forgejo_token or not args.bot_login:
         parser.error("secret files must not be empty")
     jobs = queue.Queue()
-    threading.Thread(target=worker, args=(jobs, args.state_dir, api_key), daemon=True).start()
+    threading.Thread(target=worker, args=(jobs, args.state_dir, api_key,
+                                          forgejo_token, args.bot_login), daemon=True).start()
     server = ThreadingHTTPServer((args.listen, args.port), make_handler(secret, jobs))
     server.serve_forever()
 

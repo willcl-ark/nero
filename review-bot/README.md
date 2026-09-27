@@ -1,11 +1,11 @@
-# Draft pull request reviewer
+# Pull request reviewer
 
-This small service accepts Forgejo `pull_request` webhooks for
+This service accepts Forgejo `pull_request` webhooks for
 `https://git.fish.foo/bitcoin/bitcoin`. It fetches the base branch and PR head
 from that fixed origin, checks out the head in its own directory, and reviews
-the full PR diff and commit messages. It writes one Markdown draft per PR at
-`STATE_DIR/drafts/pr-NUMBER.md`, replacing it when the head changes. It never
-posts to Forgejo or runs PR code.
+the full PR diff and commit messages. It posts one comment from the configured
+bot account per PR. Later reviews edit that comment only when its content
+changes. It never runs PR code.
 
 Run with Python 3.9 or newer and Git:
 
@@ -13,26 +13,30 @@ Run with Python 3.9 or newer and Git:
 python3 bot.py --listen 127.0.0.1 --port 8765 \
   --state-dir /var/lib/review-bot \
   --openai-key-file /run/secrets/openai-api-key \
-  --webhook-secret-file /run/secrets/review-bot-webhook-secret
+  --webhook-secret-file /run/secrets/review-bot-webhook-secret \
+  --forgejo-token-file /run/secrets/forgejo-review-bot-token \
+  --bot-login review-bot
 ```
+
+The Forgejo token must belong to `--bot-login` and have permission to read,
+create, and edit issue comments in `bitcoin/bitcoin`. The service finds its
+comment using both the account name and a hidden marker. It searches all
+comment pages before creating one, and ignores a matching marker written by
+another account.
 
 Set the Forgejo webhook to `POST` JSON to
 `https://YOUR_HOST/webhooks/forgejo`. Set a long random secret in Forgejo and
 the same value in the webhook secret file. Select custom pull request events.
-The receiver accepts `opened`, `reopened`, and `synchronize` actions. It also
-accepts `synchronized` for Forgejo variants. It
-validates `X-Forgejo-Signature` against the raw body before parsing JSON.
+The receiver accepts `opened`, `reopened`, `synchronize`, and `synchronized`
+actions. It validates `X-Forgejo-Signature` against the raw body before
+parsing JSON.
 
 The bot skips a review when the fetched head no longer matches the webhook
-head or when the diff and commit messages exceed 200,000 bytes. These skips
-get a local draft explaining why. A draft for the current head prevents
-repeated API calls. A stale-head delivery creates no draft. A failed fetch or
-API call is logged without
-including keys or patch content. Each request uses `gpt-6-sol` with
-`store: false` and no tools.
-
-When publishing is added, keep one bot-owned issue comment per PR. Find it by
-author and a stable marker, create it if absent, and edit it only when the
-review body changes. The current service has no Forgejo write credential.
+head. It also checks the current `refs/pull/NUM/head` Git ref immediately before
+posting. If the diff and commit messages exceed 200,000 bytes, its comment
+says the review was skipped. A failed fetch or API call is logged without keys
+or patch content. Each request uses `gpt-6-sol` with `store: false` and no
+tools. A repeated webhook for a head the bot already reviewed skips the model
+call. An unchanged review never edits the existing comment.
 
 Run local tests with `python3 -m unittest discover -s review-bot -p 'test_*.py'`.
