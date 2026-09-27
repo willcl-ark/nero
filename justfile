@@ -61,24 +61,24 @@ rekey:
 
 [private]
 sync-remote:
-    rsync -avz -e 'ssh -p {{ssh_port}}' --delete --exclude='.git' --filter=':- .gitignore' ./ {{target}}:/etc/nixos/
-    ssh -p {{ssh_port}} {{target}} "git config --global --add safe.directory /etc/nixos && cd /etc/nixos && git init -q && git add -A"
+    rsync -avz -e 'ssh -F /home/will/.ssh/config -p {{ssh_port}}' --delete --exclude='.git' --filter=':- .gitignore' ./ {{target}}:/etc/nixos/
+    ssh -F /home/will/.ssh/config -p {{ssh_port}} {{target}} "git config --global --add safe.directory /etc/nixos && cd /etc/nixos && git init -q && git add -A"
 
 # Sync repo to remote and switch configuration.
 # Reusable service modules are fetched through flake.lock.
 switch: sync-remote
-    ssh -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#{{hostname}}"
+    ssh -F /home/will/.ssh/config -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#{{hostname}}"
 
 # Develop against the local shared Nix flake without publishing or changing
 # flake.lock. A normal `just switch` uses the pinned GitHub input instead.
 switch-local-nix: sync-remote
-    rsync -avz -e 'ssh -p {{ssh_port}}' --delete --exclude='.git' /home/will/src/nix/ {{target}}:/var/lib/will-nix-dev/
-    ssh -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#{{hostname}} --override-input will-nix path:/var/lib/will-nix-dev"
+    rsync -avz -e 'ssh -F /home/will/.ssh/config -p {{ssh_port}}' --delete --exclude='.git' /home/will/src/nix/ {{target}}:/var/lib/will-nix-dev/
+    ssh -F /home/will/.ssh/config -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#{{hostname}} --override-input will-nix path:/var/lib/will-nix-dev"
 
 # Sync repo to remote and build there without switching.
 # This verifies the same remote flake path used by `just switch`.
 build-remote: sync-remote
-    ssh -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild build --flake /etc/nixos#{{hostname}} --no-link"
+    ssh -F /home/will/.ssh/config -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild build --flake /etc/nixos#{{hostname}} --no-link"
 
 # Ask the live review bot to review an already-open upstream pull request.
 review-pr number:
