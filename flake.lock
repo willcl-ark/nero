@@ -43,11 +43,11 @@
     "dnsseedrs": {
       "flake": false,
       "locked": {
-        "lastModified": 1787925135,
-        "narHash": "sha256-zqB3OHQ+e8f+atpejVt0dgrnnrw4Enh6ZvGi5nphIag=",
+        "lastModified": 1789631034,
+        "narHash": "sha256-znx7iAWDVIworDV9EB17I6zLME3fgiyTNtyo292aUCw=",
         "owner": "willcl-ark",
         "repo": "dnsseedrs",
-        "rev": "791fb2e7636c7ef4cf79b499cf7b25c07363990e",
+        "rev": "2e8f7969405935c366afee6d889e255653c5bb57",
         "type": "github"
       },
       "original": {
