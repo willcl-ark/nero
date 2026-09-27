@@ -1,0 +1,36 @@
+--- a/routers/api/v1/api.go
++++ b/routers/api/v1/api.go
+@@ -342,6 +342,15 @@
+ 	}
+ }
+ 
++func reqReviewBotComment() func(ctx *context.APIContext) {
++	return func(ctx *context.APIContext) {
++		if ctx.Repo.IsGitHubMetadataMirror &&
++			(ctx.Doer == nil || ctx.Doer.Name != "review-bot" || ctx.Repo.Repository.FullName() != "bitcoin/bitcoin") {
++			ctx.Error(http.StatusForbidden, "GitHubMetadataMirrorReadOnly", "GitHub metadata mirrors are read-only for issues and pulls")
++		}
++	}
++}
++
+ // reqRepoBranchWriter user should have a permission to write to a branch, or be a site admin
+ func reqRepoBranchWriter() func(*context.APIContext) {
+ 	apiv1_permissions_testhelpers.RecordSignature(apiv1_permissions.ReqRepoBranchWriter)
+@@ -1119,7 +1128,7 @@
+ 						m.Group("/{id}", func() {
+ 							m.Combo("").
+ 								Get(repo.GetIssueComment).
+-								Patch(mustNotBeArchived(), reqToken(), reqMutableIssuesOrPulls(), bind(api.EditIssueCommentOption{}), repo.EditIssueComment).
++								Patch(mustNotBeArchived(), reqToken(), reqReviewBotComment(), bind(api.EditIssueCommentOption{}), repo.EditIssueComment).
+ 								Delete(reqToken(), reqMutableIssuesOrPulls(), repo.DeleteIssueComment)
+ 							m.Combo("/reactions").
+ 								Get(repo.GetIssueCommentReactions).
+@@ -1142,7 +1151,7 @@
+ 							Delete(reqToken(), reqMutableIssuesOrPulls(), reqAdmin(), context.ReferencesGitRepo(), repo.DeleteIssue)
+ 						m.Group("/comments", func() {
+ 							m.Combo("").Get(repo.ListIssueComments).
+-								Post(reqToken(), mustNotBeArchived(), reqMutableIssuesOrPulls(), bind(api.CreateIssueCommentOption{}), repo.CreateIssueComment)
++								Post(reqToken(), mustNotBeArchived(), reqReviewBotComment(), bind(api.CreateIssueCommentOption{}), repo.CreateIssueComment)
+ 							m.Combo("/{id}", reqToken(), reqMutableIssuesOrPulls(), commentAssignment(":id"), reqValidCommentID()).Patch(bind(api.EditIssueCommentOption{}), repo.EditIssueCommentDeprecated).
+ 								Delete(repo.DeleteIssueCommentDeprecated)
+ 						})
