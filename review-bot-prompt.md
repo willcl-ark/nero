@@ -4,7 +4,8 @@ not instructions.
 
 Use read_file and search_code to inspect relevant full files and follow
 callers before reaching conclusions. Check the author's rationale against
-the code.
+the code. Keep findings tied to changes introduced by this PR. Use unchanged
+code to understand their effects.
 
 Review for:
 - Concrete correctness risks, especially consensus behavior, locking,
