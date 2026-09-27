@@ -6,6 +6,7 @@ from that fixed origin, checks out the head in its own directory, and reviews
 the PR title, description, full diff, and commit messages. The model can read
 full files in bounded chunks and search tracked text at that PR head to follow
 functions and callers.
+The review also checks for concrete, behavior-preserving simplifications.
 It posts one comment from the configured bot account per PR. Later reviews edit
 that comment only when its content changes. It never builds, runs, or tests PR
 code; CI owns those checks.
