@@ -81,8 +81,8 @@ build-remote: sync-remote
     ssh -F /home/will/.ssh/config -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild build --flake /etc/nixos#{{hostname}} --no-link"
 
 # Ask the live review bot to review an already-open upstream pull request.
-review-pr number:
-    python3 scripts/review-pr-local {{quote(number)}}
+review-pr number force="":
+    python3 scripts/review-pr-local {{quote(number)}} {{quote(force)}}
 
 # Build locally and switch remote configuration
 push:
