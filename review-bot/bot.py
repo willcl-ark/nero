@@ -39,7 +39,10 @@ and whether commits are atomic and explain their rationale. Do not claim a
 commit builds or tests successfully. Leave all builds, test runs, and their
 results to CI. Judge possible test gaps from the patch and inspected context.
 Avoid speculative comments. Write a concise Markdown review for the
-pull request."""
+pull request. Write like a careful human reviewer: use plain words, active
+voice, and specific evidence. Say what the code does and why an issue matters.
+Cut filler, stock praise, inflated language, generic conclusions, decorative
+formatting, emoji, and em dashes. Vary sentence length naturally."""
 TOOLS = [
     {"type": "function", "name": "read_file", "strict": True,
      "description": "Read numbered lines from a tracked text file at the PR head. "
@@ -114,18 +117,15 @@ def collect_review(checkout, number, base_ref, expected_head):
     actual_head = git(checkout, "rev-parse", "refs/review-bot/head").strip()
     base_sha = git(checkout, "rev-parse", "refs/review-bot/base").strip()
     if actual_head != expected_head:
-        return base_sha, actual_head, None, "PR head changed before review", []
+        return base_sha, actual_head, None, "PR head changed before review"
     merge_base = git(checkout, "merge-base", "refs/review-bot/base", actual_head).strip()
     git(checkout, "checkout", "--detach", "--force", "-q", actual_head)
     commits = git(checkout, "log", "--reverse", "--format=%H%n%B%n%x00", f"{merge_base}..{actual_head}")
     patch = git(checkout, "diff", "--no-ext-diff", "--binary", f"{merge_base}..{actual_head}")
     review = f"Commits:\n{commits}\nPatch:\n{patch}"
     if len(review.encode()) > MAX_REVIEW_BYTES:
-        return base_sha, actual_head, None, f"Review input exceeds {MAX_REVIEW_BYTES} bytes", []
-    messages = git(checkout, "log", "--format=%B%x00", f"{merge_base}..{actual_head}")
-    at_mentions = [message.splitlines()[0][:100] for message in messages.split("\x00")
-                   if re.search(r"(?<!\w)@[A-Za-z0-9_-]+", message)]
-    return base_sha, actual_head, review, None, at_mentions
+        return base_sha, actual_head, None, f"Review input exceeds {MAX_REVIEW_BYTES} bytes"
+    return base_sha, actual_head, review, None
 
 
 def tracked_files(checkout):
@@ -323,15 +323,11 @@ def worker(jobs, state_dir, api_key, forgejo_token, bot_login):
                                     expected_head):
                 logging.info("PR #%d head already reviewed", number)
                 continue
-            base_sha, head_sha, review, skip, at_mentions = collect_review(
+            base_sha, head_sha, review, skip = collect_review(
                 checkout, number, base_ref, expected_head)
             if head_sha != expected_head:
                 continue
             content = f"Skipped: {skip}" if skip else openai_review(api_key, review, checkout)
-            if at_mentions:
-                content = ("## Commit message check\n\nRemove the `@` mention in: "
-                           + ", ".join(f"`{subject}`" for subject in at_mentions)
-                           + "\n\n" + content)
             result = publish_review(forgejo_token, number, bot_login,
                                     base_sha, head_sha, content)
             logging.info("PR #%d review %s", number, result)

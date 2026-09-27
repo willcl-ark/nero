@@ -72,12 +72,11 @@ class BotTests(unittest.TestCase):
     def test_collect_review_skips_stale_head_without_model_call(self):
         outputs = iter(["", "b" * 40, "c" * 40])
         with patch.object(bot, "prepare_checkout"), patch.object(bot, "git", side_effect=lambda *a: next(outputs)):
-            base, head, review, skip, mentions = bot.collect_review(Path("/unused"), 42, "master", "a" * 40)
+            base, head, review, skip = bot.collect_review(Path("/unused"), 42, "master", "a" * 40)
         self.assertEqual((base, head, review), ("c" * 40, "b" * 40, None))
         self.assertIn("changed", skip)
-        self.assertEqual(mentions, [])
 
-    def test_collect_review_uses_merge_base_and_finds_commit_mentions(self):
+    def test_collect_review_uses_merge_base(self):
         head = "a" * 40
         base = "b" * 40
         merge_base = "c" * 40
@@ -90,7 +89,7 @@ class BotTests(unittest.TestCase):
             if args[0] == "merge-base":
                 return merge_base
             if args[0] == "log":
-                return "Fix issue @reviewer\n\x00"
+                return "Explain the commit rationale\n\x00"
             if args[0] == "diff":
                 return "+change\n"
             return ""
@@ -99,7 +98,8 @@ class BotTests(unittest.TestCase):
             result = bot.collect_review(Path("/unused"), 42, "master", head)
         self.assertEqual(result[0:2], (base, head))
         self.assertIn("+change", result[2])
-        self.assertEqual(result[4], ["Fix issue @reviewer"])
+        self.assertEqual(len(result), 4)
+        self.assertIn("Explain the commit rationale", result[2])
         self.assertIn(("diff", "--no-ext-diff", "--binary", f"{merge_base}..{head}"), calls)
 
     def test_openai_request_disables_storage(self):
