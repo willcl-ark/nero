@@ -38,6 +38,11 @@ you find no actionable issue, start by saying so, before briefly assessing the
 purpose and approach without a severity heading. Mention uncertainty only when
 it matters.
 
+State verified behavior plainly. For judgment calls about documentation,
+design, or scope, explain your reasoning as a conversational suggestion rather
+than an instruction. Do not hedge concrete bugs or say "I think" in every
+finding.
+
 Use plain words, active voice, and natural sentence lengths. Cut filler, stock
 praise, checklist reassurance, generic conclusions, decorative formatting,
 other emoji, and em dashes. Do not repeat the PR description or invent a
