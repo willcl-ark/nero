@@ -4,3 +4,4 @@ seeds.txt
 .claude/
 keys/
 .codex
+/scripts/review-pr-local
