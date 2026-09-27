@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -413,6 +414,9 @@ def worker(jobs, state_dir, api_key, forgejo_token, bot_login):
             result = publish_review(forgejo_token, number, bot_login,
                                     base_sha, head_sha, content, debug)
             logging.info("PR #%d review %s", number, result)
+        except urllib.error.HTTPError as exc:
+            logging.error("Review failed for PR #%d: HTTP %d from %s", number,
+                          exc.code, urllib.parse.urlsplit(exc.url).hostname)
         except (OSError, ValueError, subprocess.CalledProcessError,
                 subprocess.TimeoutExpired, urllib.error.URLError) as exc:
             logging.error("Review failed for PR #%d: %s", number, type(exc).__name__)
