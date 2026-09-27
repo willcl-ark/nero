@@ -318,31 +318,20 @@ in
     reverse_proxy 127.0.0.1:8765
   '';
 
-  users.users.forgejo-review-bot = {
-    isSystemUser = true;
-    group = "forgejo-review-bot";
+  services.forgejoReviewBot = {
+    enable = true;
+    origin = "https://git.fish.foo/bitcoin/bitcoin.git";
+    repository = "bitcoin/bitcoin";
+    forgejoApi = "https://git.fish.foo/api/v1/repos/bitcoin/bitcoin";
+    openaiKeyFile = config.sops.secrets.openai-api-key.path;
+    webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
+    forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
+    botLogin = "review-bot";
   };
-  users.groups.forgejo-review-bot = { };
 
   systemd.services.forgejo-review-bot = {
-    description = "Forgejo pull request review bot";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "sops-install-secrets.service" ];
-    wants = [ "network-online.target" "sops-install-secrets.service" ];
-    path = [ pkgs.git ];
-    serviceConfig = {
-      User = "forgejo-review-bot";
-      Group = "forgejo-review-bot";
-      StateDirectory = "forgejo-review-bot";
-      StateDirectoryMode = "0700";
-      WorkingDirectory = "/var/lib/forgejo-review-bot";
-      ExecStart = "${pkgs.python3}/bin/python3 ${../../review-bot/bot.py} --listen 127.0.0.1 --port 8765 --state-dir /var/lib/forgejo-review-bot --openai-key-file ${config.sops.secrets.openai-api-key.path} --webhook-secret-file ${config.sops.secrets.forgejo-review-bot-webhook-secret.path} --forgejo-token-file ${config.sops.secrets.forgejo-review-bot-token.path} --bot-login review-bot";
-      Restart = "on-failure";
-      NoNewPrivileges = true;
-      ProtectSystem = "strict";
-      ProtectHome = true;
-      PrivateTmp = true;
-    };
+    after = [ "sops-install-secrets.service" ];
+    wants = [ "sops-install-secrets.service" ];
   };
 
   systemd.services.radicle-node = {

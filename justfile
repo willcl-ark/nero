@@ -69,6 +69,12 @@ sync-remote:
 switch: sync-remote
     ssh -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#{{hostname}}"
 
+# Develop against the local shared Nix flake without publishing or changing
+# flake.lock. A normal `just switch` uses the pinned GitHub input instead.
+switch-local-nix: sync-remote
+    rsync -avz -e 'ssh -p {{ssh_port}}' --delete --exclude='.git' /home/will/src/nix/ {{target}}:/var/lib/will-nix-dev/
+    ssh -p {{ssh_port}} {{target}} "cd /etc/nixos && nixos-rebuild switch --flake /etc/nixos#{{hostname}} --override-input will-nix path:/var/lib/will-nix-dev"
+
 # Sync repo to remote and build there without switching.
 # This verifies the same remote flake path used by `just switch`.
 build-remote: sync-remote

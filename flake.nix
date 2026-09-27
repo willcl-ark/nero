@@ -78,6 +78,7 @@
             inputs.will-nix.nixosModules.bitcoin-core-guix-substitutes
             inputs.will-nix.nixosModules.stuntman
             inputs.will-nix.nixosModules.forgejo-site
+            inputs.will-nix.nixosModules.forgejo-review-bot
             inputs.niks3.nixosModules.niks3
             inputs.b10c-nix.nixosModules.default.github-metadata-backup
             {
