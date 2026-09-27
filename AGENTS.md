@@ -23,6 +23,12 @@ secrets, and deployment choices stay here. The Forgejo review bot follows
 that split. Its shared module and package are edited in the Nix repo, while
 Nero supplies its site-specific configuration.
 
+The Bitcoin Core review instructions are in `review-bot-prompt.md` here.
+`hosts/nero/default.nix` passes that file through the module's `promptFile`
+option. Edit the file here for prompt changes, then deploy with
+`just switch-local-nix` while the shared module is unpublished. The shared
+package also ships a default prompt for other module consumers.
+
 For development before publishing the Nix repo, build against the local
 checkout without changing `flake.lock`:
 

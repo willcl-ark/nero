@@ -39,6 +39,9 @@ This flake pins that collection as the `will-nix` input. The modules
 expose the service interfaces; this repo supplies site-local values such as
 domains, secret paths, and data placement.
 
+The Bitcoin Core review bot's prompt is [review-bot-prompt.md](review-bot-prompt.md).
+Nero passes it to the shared module through `services.forgejoReviewBot.promptFile`.
+
 For unpublished module changes, `just switch-local-nix` copies the local
 `/home/will/src/nix` checkout to Nero and switches with a temporary input
 override. After publishing, run `just update-modules` and then `just switch`.

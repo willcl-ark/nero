@@ -323,6 +323,7 @@ in
     origin = "https://git.fish.foo/bitcoin/bitcoin.git";
     repository = "bitcoin/bitcoin";
     forgejoApi = "https://git.fish.foo/api/v1/repos/bitcoin/bitcoin";
+    promptFile = ../../review-bot-prompt.md;
     openaiKeyFile = config.sops.secrets.openai-api-key.path;
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
