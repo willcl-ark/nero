@@ -42,4 +42,10 @@ read-only repository tools. A review allows at most 12 tool calls across eight
 model turns. A repeated webhook for a head the bot already reviewed skips the
 model call. An unchanged review never edits the existing comment.
 
+Each new comment includes a collapsed public debug section with the request
+settings and prompt, request and response hashes, tool calls, timing, token
+usage, and an estimated model cost. It omits API credentials, the patch text,
+and file contents. The cost uses published `gpt-6-sol` Standard rates and may
+differ from the billed amount.
+
 Run local tests with `python3 -m unittest discover -s review-bot -p 'test_*.py'`.

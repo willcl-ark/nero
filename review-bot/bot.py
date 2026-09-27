@@ -4,12 +4,14 @@
 import argparse
 import hashlib
 import hmac
+import html
 import json
 import logging
 import queue
 import re
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -189,25 +191,56 @@ def search_code(checkout, query):
         "\n[Results truncated]" if len(output) > MAX_TOOL_BYTES else "")
 
 
-def openai_review(api_key, review, checkout):
+def openai_review(api_key, review, checkout, debug=None):
     files = tracked_files(checkout)
     inputs = [{"role": "user", "content": review}]
+    if debug is not None:
+        review_bytes = review.encode()
+        debug.update({"instructions": INSTRUCTIONS,
+                      "review_input_bytes": len(review_bytes),
+                      "review_input_sha256": hashlib.sha256(review_bytes).hexdigest(),
+                      "turns": [], "tools": []})
     calls_used = 0
     for turn in range(MAX_MODEL_TURNS):
+        input_data = json.dumps(inputs).encode()
+        tool_choice = ("required" if turn == 0 else
+                       "none" if calls_used >= MAX_TOOL_CALLS
+                       or turn == MAX_MODEL_TURNS - 1 else "auto")
+        payload = json.dumps({"model": "gpt-6-sol", "store": False,
+                              "instructions": INSTRUCTIONS, "input": inputs,
+                              "tools": TOOLS, "tool_choice": tool_choice,
+                              "max_output_tokens": 3000}).encode()
         request = urllib.request.Request(
             "https://api.openai.com/v1/responses",
-            data=json.dumps({"model": "gpt-6-sol", "store": False,
-                             "instructions": INSTRUCTIONS, "input": inputs,
-                             "tools": TOOLS,
-                             "tool_choice": ("required" if turn == 0 else
-                                             "none" if calls_used >= MAX_TOOL_CALLS
-                                             or turn == MAX_MODEL_TURNS - 1 else "auto"),
-                             "max_output_tokens": 3000}).encode(),
+            data=payload,
             headers={"Authorization": f"Bearer {api_key}",
                      "Content-Type": "application/json"}, method="POST",
         )
+        started = time.monotonic()
         with urllib.request.urlopen(request, timeout=180) as response:
             result = json.load(response)
+        if debug is not None:
+            usage = result.get("usage") or {}
+            details = usage.get("input_tokens_details") or {}
+            debug["turns"].append({
+                "request_bytes": len(payload),
+                "request_sha256": hashlib.sha256(payload).hexdigest(),
+                "input_bytes": len(input_data),
+                "input_sha256": hashlib.sha256(input_data).hexdigest(),
+                "tool_choice": tool_choice,
+                "response_id": str(result.get("id", ""))[:100],
+                "response_model": str(result.get("model", ""))[:100],
+                "status": str(result.get("status", ""))[:100],
+                "response_output_sha256": hashlib.sha256(
+                    json.dumps(result.get("output", [])).encode()).hexdigest(),
+                "elapsed_seconds": round(time.monotonic() - started, 2),
+                "input_tokens": usage.get("input_tokens"),
+                "cached_tokens": details.get("cached_tokens", 0),
+                "cache_write_tokens": details.get("cache_write_tokens"),
+                "output_tokens": usage.get("output_tokens"),
+                "reasoning_tokens": (usage.get("output_tokens_details") or {}).get(
+                    "reasoning_tokens"),
+            })
         if result.get("status") != "completed":
             raise ValueError("OpenAI response did not complete")
         output = result.get("output", [])
@@ -232,6 +265,15 @@ def openai_review(api_key, review, checkout):
                         answer = "Invalid tool arguments."
                 inputs.append({"type": "function_call_output",
                                "call_id": call["call_id"], "output": answer})
+                if debug is not None:
+                    arguments = str(call.get("arguments", ""))
+                    debug["tools"].append({
+                        "name": str(call.get("name", ""))[:100],
+                        "arguments": arguments[:160],
+                        "arguments_sha256": hashlib.sha256(arguments.encode()).hexdigest(),
+                        "output_bytes": len(answer.encode()),
+                        "output_sha256": hashlib.sha256(answer.encode()).hexdigest(),
+                    })
             continue
         text = "\n".join(part["text"] for item in output
                          if item.get("type") == "message"
@@ -286,10 +328,49 @@ def current_head(number):
     return fields[0]
 
 
-def review_body(base_sha, head_sha, content):
+def debug_section(debug):
+    turns = debug.get("turns", [])
+    known_usage = all(isinstance(turn.get("input_tokens"), int)
+                      and isinstance(turn.get("output_tokens"), int)
+                      for turn in turns)
+    trace = {"model": "gpt-6-sol", "endpoint": "/v1/responses", "store": False,
+             "max_output_tokens": 3000,
+             "instructions": debug.get("instructions", INSTRUCTIONS),
+             "input": "Patch and commit text omitted from public debug output",
+             "turns": turns, "tools": debug.get("tools", [])}
+    if "review_input_bytes" in debug:
+        trace["review_input_bytes"] = debug["review_input_bytes"]
+        trace["review_input_sha256"] = debug["review_input_sha256"]
+    if debug.get("skip"):
+        trace["skip"] = debug["skip"]
+    if known_usage and turns:
+        cost = 0.0
+        for turn in turns:
+            input_tokens = turn["input_tokens"]
+            cached = turn["cached_tokens"] or 0
+            written = turn["cache_write_tokens"] or 0
+            ordinary = max(0, input_tokens - cached - written)
+            multiplier = 2 if input_tokens > 272_000 else 1
+            output_multiplier = 1.5 if multiplier == 2 else 1
+            cost += (ordinary * 2 + cached * 0.2 + written * 2.5) * multiplier / 1_000_000
+            cost += turn["output_tokens"] * 10 * output_multiplier / 1_000_000
+        trace["estimated_cost_usd"] = round(cost, 6)
+        trace["total_input_tokens"] = sum(turn["input_tokens"] for turn in turns)
+        trace["total_output_tokens"] = sum(turn["output_tokens"] for turn in turns)
+        trace["total_model_seconds"] = round(sum(turn["elapsed_seconds"] for turn in turns), 2)
+        trace["pricing_note"] = ("Estimated from token usage at gpt-6-sol Standard rates. "
+                                 "Missing cache-write counts are treated as zero.")
+    else:
+        trace["estimated_cost_usd"] = None
+    rendered = html.escape(json.dumps(trace, indent=2, ensure_ascii=True))
+    return f"\n<details><summary>Review debug</summary>\n\n<pre>{rendered}</pre>\n</details>\n"
+
+
+def review_body(base_sha, head_sha, content, debug=None):
     return (f"{COMMENT_MARKER}\n"
             f"First-pass review\n\nBase: `{base_sha}`  \nHead: `{head_sha}`\n\n"
-            f"{content.strip()}\n")
+            f"{content.strip()}\n"
+            f"{debug_section(debug) if debug is not None else ''}")
 
 
 def comment_matches_head(comment, head_sha):
@@ -297,8 +378,8 @@ def comment_matches_head(comment, head_sha):
             and f"Head: `{head_sha}`" in comment.get("body", "").splitlines()[:5])
 
 
-def publish_review(token, number, bot_login, base_sha, head_sha, content):
-    body = review_body(base_sha, head_sha, content)
+def publish_review(token, number, bot_login, base_sha, head_sha, content, debug=None):
+    body = review_body(base_sha, head_sha, content, debug)
     comment = find_comment(token, number, bot_login)
     # Check as close as possible to publication, after paginating old comments.
     if current_head(number) != head_sha:
@@ -327,9 +408,10 @@ def worker(jobs, state_dir, api_key, forgejo_token, bot_login):
                 checkout, number, base_ref, expected_head)
             if head_sha != expected_head:
                 continue
-            content = f"Skipped: {skip}" if skip else openai_review(api_key, review, checkout)
+            debug = {"skip": skip} if skip else {}
+            content = f"Skipped: {skip}" if skip else openai_review(api_key, review, checkout, debug)
             result = publish_review(forgejo_token, number, bot_login,
-                                    base_sha, head_sha, content)
+                                    base_sha, head_sha, content, debug)
             logging.info("PR #%d review %s", number, result)
         except (OSError, ValueError, subprocess.CalledProcessError,
                 subprocess.TimeoutExpired, urllib.error.URLError) as exc:

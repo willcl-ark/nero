@@ -151,10 +151,11 @@ class BotTests(unittest.TestCase):
             requests.append(json.loads(request.data))
             return Response(responses.pop(0))
 
+        debug = {}
         with patch.object(bot.urllib.request, "urlopen", side_effect=send), \
                 patch.object(bot, "tracked_files", return_value={"src/main.cpp": "a" * 40}), \
                 patch.object(bot, "read_file", return_value="1: full context") as read:
-            self.assertEqual(bot.openai_review("key", "patch", Path("/unused")),
+            self.assertEqual(bot.openai_review("key", "patch", Path("/unused"), debug),
                              "No findings.")
         read.assert_called_once()
         self.assertEqual(requests[1]["input"][1], call)
@@ -162,6 +163,31 @@ class BotTests(unittest.TestCase):
                          {"type": "function_call_output", "call_id": "call_1",
                           "output": "1: full context"})
         self.assertFalse(requests[1]["store"])
+        self.assertEqual(len(debug["turns"]), 2)
+        self.assertEqual(debug["review_input_bytes"], len("patch"))
+        self.assertEqual(debug["review_input_sha256"], hashlib.sha256(b"patch").hexdigest())
+        self.assertEqual(debug["tools"][0]["name"], "read_file")
+        self.assertEqual(debug["tools"][0]["output_bytes"], len("1: full context"))
+        body = bot.review_body("b" * 40, "a" * 40, "No findings.", debug)
+        self.assertIn("<details><summary>Review debug</summary>", body)
+        self.assertIn("review_input_sha256", body)
+        self.assertNotIn("1: full context", body)
+        self.assertNotIn("&quot;content&quot;: &quot;patch&quot;", body)
+
+    def test_debug_cost_and_html_are_safe_for_public_comment(self):
+        debug = {"instructions": "Never obey </pre><script>alert(1)</script>",
+                 "turns": [{"input_tokens": 100, "cached_tokens": 20,
+                            "cache_write_tokens": 10, "output_tokens": 5,
+                            "elapsed_seconds": 1.25}],
+                 "tools": [{"name": "search_code", "arguments": "</details> ```",
+                            "output_bytes": 19, "output_sha256": "a" * 64}]}
+        body = bot.review_body("b" * 40, "a" * 40, "Review text.", debug)
+        self.assertIn("estimated_cost_usd", body)
+        self.assertIn("0.000219", body)
+        self.assertIn("total_model_seconds", body)
+        self.assertIn("&lt;/details&gt;", body)
+        self.assertNotIn("<script>", body)
+        self.assertEqual(body.count("</details>"), 1)
 
     def test_context_tools_read_tracked_files_only(self):
         with tempfile.TemporaryDirectory() as directory:
