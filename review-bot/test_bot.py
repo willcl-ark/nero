@@ -2,6 +2,8 @@ import hashlib
 import hmac
 import importlib.util
 import json
+import subprocess
+import tempfile
 import threading
 import unittest
 import urllib.error
@@ -112,12 +114,73 @@ class BotTests(unittest.TestCase):
                 return json.dumps({"status": "completed", "output": [{"type": "message",
                     "content": [{"type": "output_text", "text": "No findings."}]}]}).encode()
 
-        with patch.object(bot.urllib.request, "urlopen", return_value=Response()) as send:
-            self.assertEqual(bot.openai_review("test-key", "patch"), "No findings.")
+        with patch.object(bot.urllib.request, "urlopen", return_value=Response()) as send, \
+                patch.object(bot, "tracked_files", return_value={}):
+            self.assertEqual(bot.openai_review("test-key", "patch", Path("/unused")),
+                             "No findings.")
         request = send.call_args.args[0]
         sent = json.loads(request.data)
         self.assertIs(sent["store"], False)
         self.assertEqual(sent["model"], "gpt-6-sol")
+        self.assertEqual(sent["tool_choice"], "required")
+
+    def test_model_reads_context_then_finishes_with_stateless_history(self):
+        call = {"type": "function_call", "id": "fc_1", "call_id": "call_1",
+                "name": "read_file", "arguments": '{"path":"src/main.cpp","start_line":1}'}
+        responses = [
+            {"status": "completed", "output": [call]},
+            {"status": "completed", "output": [{"type": "message",
+                "content": [{"type": "output_text", "text": "No findings."}]}]},
+        ]
+        requests = []
+
+        class Response:
+            def __init__(self, result):
+                self.result = result
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def read(self, *args):
+                return json.dumps(self.result).encode()
+
+        def send(request, timeout):
+            requests.append(json.loads(request.data))
+            return Response(responses.pop(0))
+
+        with patch.object(bot.urllib.request, "urlopen", side_effect=send), \
+                patch.object(bot, "tracked_files", return_value={"src/main.cpp": "a" * 40}), \
+                patch.object(bot, "read_file", return_value="1: full context") as read:
+            self.assertEqual(bot.openai_review("key", "patch", Path("/unused")),
+                             "No findings.")
+        read.assert_called_once()
+        self.assertEqual(requests[1]["input"][1], call)
+        self.assertEqual(requests[1]["input"][2],
+                         {"type": "function_call_output", "call_id": "call_1",
+                          "output": "1: full context"})
+        self.assertFalse(requests[1]["store"])
+
+    def test_context_tools_read_tracked_files_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            subprocess.run(["git", "-C", directory, "init", "-q"], check=True)
+            (checkout / "code.cpp").write_text("void target() {}\nvoid caller() { target(); }\n")
+            (checkout / "link.cpp").symlink_to("code.cpp")
+            subprocess.run(["git", "-C", directory, "add", "code.cpp", "link.cpp"],
+                           check=True)
+            subprocess.run(["git", "-C", directory, "-c", "user.name=Test",
+                            "-c", "user.email=test@example.com", "commit", "-qm",
+                            "fixture"], check=True)
+            files = bot.tracked_files(checkout)
+            self.assertIn("code.cpp", files)
+            self.assertNotIn("link.cpp", files)
+            self.assertIn("2: void caller()", bot.read_file(checkout, files, "code.cpp", 2))
+            self.assertIn("Only tracked", bot.read_file(checkout, files, "../code.cpp", 1))
+            self.assertIn("Only tracked", bot.read_file(checkout, files, "link.cpp", 1))
+            self.assertIn("HEAD:code.cpp:1:void target", bot.search_code(checkout, "target"))
 
     def test_publish_creates_then_edits_one_bot_comment(self):
         comments = [{"id": 1, "user": {"login": "someone-else"},
