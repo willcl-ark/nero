@@ -85,6 +85,11 @@ in
     mode = "0400";
   };
 
+  sops.secrets.forgejo-review-bot-token = {
+    owner = "forgejo-review-bot";
+    mode = "0400";
+  };
+
   sops.secrets.niks3-api-token = {
     owner = "niks3";
     group = "niks3";
@@ -331,7 +336,7 @@ in
       StateDirectory = "forgejo-review-bot";
       StateDirectoryMode = "0700";
       WorkingDirectory = "/var/lib/forgejo-review-bot";
-      ExecStart = "${pkgs.python3}/bin/python3 ${../../review-bot/bot.py} --listen 127.0.0.1 --port 8765 --state-dir /var/lib/forgejo-review-bot --openai-key-file ${config.sops.secrets.openai-api-key.path} --webhook-secret-file ${config.sops.secrets.forgejo-review-bot-webhook-secret.path}";
+      ExecStart = "${pkgs.python3}/bin/python3 ${../../review-bot/bot.py} --listen 127.0.0.1 --port 8765 --state-dir /var/lib/forgejo-review-bot --openai-key-file ${config.sops.secrets.openai-api-key.path} --webhook-secret-file ${config.sops.secrets.forgejo-review-bot-webhook-secret.path} --forgejo-token-file ${config.sops.secrets.forgejo-review-bot-token.path} --bot-login review-bot";
       Restart = "on-failure";
       NoNewPrivileges = true;
       ProtectSystem = "strict";
