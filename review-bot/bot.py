@@ -30,8 +30,10 @@ Review only evidence in the supplied patch and commits. Identify concrete,
 actionable issues, or say that you found none. Check whether the changes stay
 focused; whether behavior changes need tests, documentation, or release notes;
 and whether commits are atomic and explain their rationale. Do not claim a
-commit builds or tests successfully from a patch alone. Avoid speculative
-comments. Write a concise Markdown review for the pull request."""
+commit builds or tests successfully from a patch alone. Leave all builds,
+test runs, and their results to CI. Judge possible test gaps only from the
+patch. Avoid speculative comments. Write a concise Markdown review for the
+pull request."""
 
 
 def valid_signature(body, header, secret):

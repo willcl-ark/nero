@@ -5,7 +5,7 @@ This service accepts Forgejo `pull_request` webhooks for
 from that fixed origin, checks out the head in its own directory, and reviews
 the full PR diff and commit messages. It posts one comment from the configured
 bot account per PR. Later reviews edit that comment only when its content
-changes. It never runs PR code.
+changes. It never builds, runs, or tests PR code; CI owns those checks.
 
 Run with Python 3.9 or newer and Git:
 
