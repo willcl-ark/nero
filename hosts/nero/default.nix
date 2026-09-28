@@ -323,6 +323,13 @@ in
   '';
 
   services.caddy.virtualHosts."review.fish.foo".extraConfig = ''
+    log {
+      output file /var/log/caddy/access-review.fish.foo.log
+      format filter {
+        request>headers delete
+      }
+    }
+
     reverse_proxy 127.0.0.1:8765
   '';
 
