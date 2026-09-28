@@ -92,6 +92,7 @@
                       ./patches/forgejo-review-bot-comments.patch
                       ./patches/forgejo-github-metadata-sync-webhook.patch
                       ./patches/forgejo-github-metadata-comment-edits.patch
+                      ./patches/forgejo-github-metadata-review-comment-map.patch
                       ./patches/forgejo-resource-index-sync.patch
                     ];
                     postPatch = ''

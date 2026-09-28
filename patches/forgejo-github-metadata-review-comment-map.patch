@@ -1,0 +1,193 @@
+diff --git a/services/githubmetadata/sync.go b/services/githubmetadata/sync.go
+index 6f27e3c..1b7d8ae 100644
+--- a/services/githubmetadata/sync.go
++++ b/services/githubmetadata/sync.go
+@@ -886,15 +886,6 @@ func (imp *importer) importReview(ctx context.Context, issue *issues_model.Issue
+ 		UpdatedUnix: timeutil.TimeStamp(created.Unix()),
+ 	}
+ 	applyExternalUser(event.User, &review.ReviewerID, &review.OriginalAuthor, &review.OriginalAuthorID)
+-	commentSourceIDs := make([]int64, 0, len(comments))
+-	for _, comment := range comments {
+-		if sourceMap, err := getSourceMap(ctx, imp.repo.ID, sourceKindReviewComment, comment.ID); err != nil {
+-			return err
+-		} else if sourceMap == nil {
+-			review.Comments = append(review.Comments, reviewComment(issue, review.ID, comment))
+-			commentSourceIDs = append(commentSourceIDs, comment.ID)
+-		}
+-	}
+ 	if err := issues_model.InsertReviews(ctx, []*issues_model.Review{review}); err != nil {
+ 		return err
+ 	}
+@@ -904,15 +895,7 @@ func (imp *importer) importReview(ctx context.Context, issue *issues_model.Issue
+ 	if err := recordSourceMap(ctx, imp.repo.ID, sourceKindReview, event.ID, review.ID, issue.Index); err != nil {
+ 		return err
+ 	}
+-	for i, comment := range review.Comments {
+-		if err := imp.localizeCommentContent(ctx, comment); err != nil {
+-			return err
+-		}
+-		if err := recordSourceMap(ctx, imp.repo.ID, sourceKindReviewComment, commentSourceIDs[i], comment.ID, issue.Index); err != nil {
+-			return err
+-		}
+-	}
+-	return nil
++	return imp.importReviewComments(ctx, issue, review.ID, comments)
+ }
+ 
+ func (imp *importer) importSyntheticReview(ctx context.Context, issue *issues_model.Issue, pr *issues_model.PullRequest, reviewID int64, comments []githubReviewComment) error {
+@@ -935,15 +918,6 @@ func (imp *importer) importSyntheticReview(ctx context.Context, issue *issues_mo
+ 		UpdatedUnix: timeutil.TimeStamp(first.UpdatedAt.Unix()),
+ 	}
+ 	applyExternalUser(first.User, &review.ReviewerID, &review.OriginalAuthor, &review.OriginalAuthorID)
+-	commentSourceIDs := make([]int64, 0, len(comments))
+-	for _, comment := range comments {
+-		if sourceMap, err := getSourceMap(ctx, imp.repo.ID, sourceKindReviewComment, comment.ID); err != nil {
+-			return err
+-		} else if sourceMap == nil {
+-			review.Comments = append(review.Comments, reviewComment(issue, review.ID, comment))
+-			commentSourceIDs = append(commentSourceIDs, comment.ID)
+-		}
+-	}
+ 	if err := issues_model.InsertReviews(ctx, []*issues_model.Review{review}); err != nil {
+ 		return err
+ 	}
+@@ -953,15 +927,7 @@ func (imp *importer) importSyntheticReview(ctx context.Context, issue *issues_mo
+ 	if err := recordSourceMap(ctx, imp.repo.ID, sourceKindReview, reviewID, review.ID, pr.Index); err != nil {
+ 		return err
+ 	}
+-	for i, comment := range review.Comments {
+-		if err := imp.localizeCommentContent(ctx, comment); err != nil {
+-			return err
+-		}
+-		if err := recordSourceMap(ctx, imp.repo.ID, sourceKindReviewComment, commentSourceIDs[i], comment.ID, issue.Index); err != nil {
+-			return err
+-		}
+-	}
+-	return nil
++	return imp.importReviewComments(ctx, issue, review.ID, comments)
+ }
+ 
+ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_model.Issue, reviewID int64, comments []githubReviewComment) error {
+@@ -971,6 +937,16 @@ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_mod
+ 		if sourceMap, err := getSourceMap(ctx, imp.repo.ID, sourceKindReviewComment, comment.ID); err != nil {
+ 			return err
+ 		} else if sourceMap != nil {
++			if sourceMap.LocalID == 0 {
++				legacyComment, err := findLegacyReviewComment(ctx, reviewID, comment)
++				if err != nil {
++					return err
++				}
++				sourceMap.LocalID = legacyComment.ID
++				if _, err := db.GetEngine(ctx).ID(sourceMap.ID).Cols("local_id").Update(sourceMap); err != nil {
++					return err
++				}
++			}
+ 			if err := imp.updateComment(ctx, sourceMap.LocalID, comment.Body, comment.UpdatedAt); err != nil {
+ 				return err
+ 			}
+@@ -996,6 +972,42 @@ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_mod
+ 	return nil
+ }
+ 
++func findLegacyReviewComment(ctx context.Context, reviewID int64, source githubReviewComment) (*issues_model.Comment, error) {
++	authorID := int64(0)
++	if source.User != nil {
++		authorID = source.User.ID
++	}
++	var candidates []*issues_model.Comment
++	err := db.GetEngine(ctx).
++		Where("review_id = ?", reviewID).
++		And("type = ?", issues_model.CommentTypeCode).
++		And("created_unix = ?", source.CreatedAt.Unix()).
++		And("tree_path = ?", util.PathJoinRel(source.Path)).
++		And("original_author_id = ?", authorID).
++		Find(&candidates)
++	if err != nil {
++		return nil, err
++	}
++	if len(candidates) == 1 {
++		return candidates[0], nil
++	}
++	line := reviewCommentLine(source)
++	commitSHA := firstNonEmpty(source.CommitID, source.OriginalCommitID)
++	var match *issues_model.Comment
++	for _, candidate := range candidates {
++		if candidate.Line == line && candidate.CommitSHA == commitSHA {
++			if match != nil {
++				return nil, fmt.Errorf("ambiguous legacy review comment %d in review %d", source.ID, reviewID)
++			}
++			match = candidate
++		}
++	}
++	if match == nil {
++		return nil, fmt.Errorf("missing legacy review comment %d in review %d", source.ID, reviewID)
++	}
++	return match, nil
++}
++
+ func (imp *importer) updateComment(ctx context.Context, id int64, body string, updated time.Time) error {
+ 	comment, err := issues_model.GetCommentByID(ctx, id)
+ 	if err != nil {
+diff --git a/services/githubmetadata/sync_test.go b/services/githubmetadata/sync_test.go
+index 338023d..37d319f 100644
+--- a/services/githubmetadata/sync_test.go
++++ b/services/githubmetadata/sync_test.go
+@@ -78,3 +78,58 @@ func TestImportedCommentEdits(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestReviewCommentWithMissingMappedID(t *testing.T) {
++	require.NoError(t, unittest.PrepareTestDatabase())
++	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
++	imp := &importer{repo: &repo_model.Repository{ID: issue.RepoID}}
++	created := time.Unix(1000, 0).UTC()
++	source := githubReviewComment{
++		ID: 987654, User: &githubUser{Login: "reviewer", ID: 12345},
++		Body: "original", Path: "src/example.cpp", CommitID: "abc123",
++		CreatedAt: created, UpdatedAt: created,
++	}
++	comment := reviewComment(issue, 1, source)
++	_, err := db.GetEngine(t.Context()).NoAutoTime().Insert(comment)
++	require.NoError(t, err)
++	otherLine := 42
++	otherSource := source
++	otherSource.Line = &otherLine
++	other := reviewComment(issue, 1, otherSource)
++	_, err = db.GetEngine(t.Context()).NoAutoTime().Insert(other)
++	require.NoError(t, err)
++	require.NoError(t, recordSourceMap(t.Context(), issue.RepoID, sourceKindReviewComment, source.ID, 0, issue.Index))
++
++	source.Body = "edited"
++	source.UpdatedAt = created.Add(time.Hour)
++	require.NoError(t, imp.importReviewComments(t.Context(), issue, 1, []githubReviewComment{source}))
++
++	mapping, err := getSourceMap(t.Context(), issue.RepoID, sourceKindReviewComment, source.ID)
++	require.NoError(t, err)
++	require.Equal(t, comment.ID, mapping.LocalID)
++	got, err := issues_model.GetCommentByID(t.Context(), comment.ID)
++	require.NoError(t, err)
++	require.Equal(t, "edited", got.Content)
++	require.Equal(t, timeutil.TimeStamp(source.UpdatedAt.Unix()), got.UpdatedUnix)
++}
++
++func TestNewReviewCommentHasMappedID(t *testing.T) {
++	require.NoError(t, unittest.PrepareTestDatabase())
++	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
++	imp := &importer{repo: &repo_model.Repository{ID: issue.RepoID}}
++	created := time.Unix(1000, 0).UTC()
++	source := githubReviewComment{
++		ID: 987655, User: &githubUser{Login: "reviewer", ID: 12345},
++		Body: "new comment", Path: "src/example.cpp", CommitID: "abc123",
++		CreatedAt: created, UpdatedAt: created,
++	}
++	pr := &issues_model.PullRequest{Index: issue.Index}
++	require.NoError(t, imp.importSyntheticReview(t.Context(), issue, pr, -source.ID, []githubReviewComment{source}))
++
++	mapping, err := getSourceMap(t.Context(), issue.RepoID, sourceKindReviewComment, source.ID)
++	require.NoError(t, err)
++	require.NotZero(t, mapping.LocalID)
++	got, err := issues_model.GetCommentByID(t.Context(), mapping.LocalID)
++	require.NoError(t, err)
++	require.Equal(t, source.Body, got.Content)
++}
