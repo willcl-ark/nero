@@ -297,6 +297,13 @@ in
 
   services.forgejo.dump.age = "7d";
 
+  systemd.services.forgejo.preStart = lib.mkAfter ''
+    install -D -m 0644 ${./forgejo-custom/footer.tmpl} \
+      ${lib.escapeShellArg config.services.forgejo.customDir}/templates/custom/footer.tmpl
+    install -D -m 0644 ${./forgejo-custom/ralph-anchor.js} \
+      ${lib.escapeShellArg config.services.forgejo.customDir}/public/assets/ralph-anchor.js
+  '';
+
   services.github-metadata-backup.bitcoin = {
     enable = true;
     owner = "bitcoin";
