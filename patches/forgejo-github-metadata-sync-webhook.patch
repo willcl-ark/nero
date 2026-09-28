@@ -1,5 +1,5 @@
 diff --git a/services/githubmetadata/sync.go b/services/githubmetadata/sync.go
-index 53ab102..ef6dd1b 100644
+index 53ab102..da5c22e 100644
 --- a/services/githubmetadata/sync.go
 +++ b/services/githubmetadata/sync.go
 @@ -28,6 +28,7 @@ import (
@@ -10,7 +10,42 @@ index 53ab102..ef6dd1b 100644
  )
  
  const (
-@@ -518,7 +519,13 @@ func (imp *importer) importPullFile(ctx context.Context, filename string) error
+@@ -318,6 +319,16 @@ func syncMirror(ctx context.Context, repo *repo_model.Repository, metadataMirror
+ 	if err != nil {
+ 		return err
+ 	}
++	notifyPullSync := false
++	if !initial && !cloned && metadataMirror.LastCommit != "" {
++		_, _, err := git.NewCommand(ctx, "merge-base", "--is-ancestor").
++			AddDynamicArguments(metadataMirror.LastCommit, currentCommit).
++			RunStdString(&git.RunOpts{Dir: metadataMirror.MetadataPath})
++		notifyPullSync = err == nil
++		if !notifyPullSync {
++			log.Info("Skipping pull request notifications while reconciling metadata history for %s", repo.FullName())
++		}
++	}
+ 
+ 	for _, filename := range issueFiles {
+ 		if err := imp.importIssueFile(ctx, filename); err != nil {
+@@ -325,7 +336,7 @@ func syncMirror(ctx context.Context, repo *repo_model.Repository, metadataMirror
+ 		}
+ 	}
+ 	for _, filename := range pullFiles {
+-		if err := imp.importPullFile(ctx, filename); err != nil {
++		if err := imp.importPullFile(ctx, filename, notifyPullSync); err != nil {
+ 			return fmt.Errorf("import pull metadata %s: %w", filename, err)
+ 		}
+ 	}
+@@ -506,7 +517,7 @@ func (imp *importer) importIssueFile(ctx context.Context, filename string) error
+ 	return imp.importIssueComments(ctx, issue, data.Events)
+ }
+ 
+-func (imp *importer) importPullFile(ctx context.Context, filename string) error {
++func (imp *importer) importPullFile(ctx context.Context, filename string, notifyPullSync bool) error {
+ 	var data pullFile
+ 	if err := readJSON(filename, &data); err != nil {
+ 		return err
+@@ -518,7 +529,13 @@ func (imp *importer) importPullFile(ctx context.Context, filename string) error
  	if err := imp.importIssueComments(ctx, issue, data.Events); err != nil {
  		return err
  	}
@@ -18,7 +53,7 @@ index 53ab102..ef6dd1b 100644
 +	if err := imp.importReviews(ctx, issue, pr, data.Events, data.Comments); err != nil {
 +		return err
 +	}
-+	if !issue.IsClosed && !pr.HasMerged {
++	if notifyPullSync && !issue.IsClosed && !pr.HasMerged {
 +		notify_service.PullRequestSynchronized(ctx, user_model.NewGhostUser(), pr)
 +	}
 +	return nil
