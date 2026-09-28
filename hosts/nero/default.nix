@@ -285,8 +285,9 @@ in
   };
 
   services.forgejo.settings.migrations.ALLOWED_DOMAINS = lib.mkForce
-    "github.com,*.github.com,cygwin.com,sourceware.org,gitlab.com,*.gitlab.com";
+    "github.com,*.github.com,github-production-user-asset-*.s3.amazonaws.com,cygwin.com,sourceware.org,gitlab.com,*.gitlab.com";
   services.forgejo.settings.migrations.ALLOW_LOCALNETWORKS = lib.mkForce true;
+  services.forgejo.settings."cron.update_github_metadata_mirrors".SCHEDULE = "@every 1m";
 
   services.forgejo.dump.age = "7d";
 
@@ -295,7 +296,7 @@ in
     owner = "bitcoin";
     repository = "bitcoin";
     personalAccessTokenFile = config.sops.secrets.github-metadata-backup-github-token.path;
-    timerOnCalendar = "*-*-* 06:00:00 UTC";
+    timerOnCalendar = "*-*-* *:00/10:00 UTC";
 
     pushToRemotes = [
       {
@@ -347,6 +348,21 @@ in
   systemd.services.github-metadata-backup-bitcoin = {
     after = [ "sops-install-secrets.service" ];
     wants = [ "sops-install-secrets.service" ];
+    script = lib.mkForce ''
+      ${config.services.github-metadata-backup.bitcoin.package}/bin/github-metadata-backup \
+        --owner=bitcoin \
+        --repo=bitcoin \
+        --destination=/var/lib/github-metadata-backup/bitcoin/ \
+        --personal-access-token-file=${config.sops.secrets.github-metadata-backup-github-token.path}
+
+      ${pkgs.git}/bin/git -C /var/lib/github-metadata-backup/bitcoin/ init
+      ${pkgs.git}/bin/git -C /var/lib/github-metadata-backup/bitcoin/ add state.json issues pulls
+      if ! ${pkgs.git}/bin/git -C /var/lib/github-metadata-backup/bitcoin/ diff --cached --quiet; then
+        ${pkgs.git}/bin/git -C /var/lib/github-metadata-backup/bitcoin/ config user.name "bitcoin:bitcoin"
+        ${pkgs.git}/bin/git -C /var/lib/github-metadata-backup/bitcoin/ config user.email "bitcoin-bitcoin@github-metadata-backup"
+        ${pkgs.git}/bin/git -C /var/lib/github-metadata-backup/bitcoin/ commit -m "bitcoin:bitcoin GitHub backup from $(date)"
+      fi
+    '';
   };
 
   systemd.services.github-metadata-backup-git-pusher-bitcoin = {
