@@ -1,0 +1,156 @@
+diff --git a/services/githubmetadata/sync.go b/services/githubmetadata/sync.go
+index 53ab102..6f27e3c 100644
+--- a/services/githubmetadata/sync.go
++++ b/services/githubmetadata/sync.go
+@@ -780,14 +780,17 @@ func (imp *importer) importIssueComments(ctx context.Context, issue *issues_mode
+ 		if event.Event != "commented" || event.ID == 0 {
+ 			continue
+ 		}
+-		if sourceMap, err := getSourceMap(ctx, imp.repo.ID, sourceKindIssueComment, event.ID); err != nil {
+-			return err
+-		} else if sourceMap != nil {
+-			continue
+-		}
+-
+ 		created := eventTime(event.CreatedAt, nil)
+ 		updated := eventTime(event.UpdatedAt, &created)
++		if sourceMap, err := getSourceMap(ctx, imp.repo.ID, sourceKindIssueComment, event.ID); err != nil {
++			return err
++		} else if sourceMap != nil {
++			if err := imp.updateComment(ctx, sourceMap.LocalID, event.Body, updated); err != nil {
++				return err
++			}
++			continue
++		}
++
+ 		comment := &issues_model.Comment{
+ 			Type:        issues_model.CommentTypeComment,
+ 			IssueID:     issue.ID,
+@@ -968,6 +971,9 @@ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_mod
+ 		if sourceMap, err := getSourceMap(ctx, imp.repo.ID, sourceKindReviewComment, comment.ID); err != nil {
+ 			return err
+ 		} else if sourceMap != nil {
++			if err := imp.updateComment(ctx, sourceMap.LocalID, comment.Body, comment.UpdatedAt); err != nil {
++				return err
++			}
+ 			continue
+ 		}
+ 		newComments = append(newComments, reviewComment(issue, reviewID, comment))
+@@ -990,6 +996,31 @@ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_mod
+ 	return nil
+ }
+ 
++func (imp *importer) updateComment(ctx context.Context, id int64, body string, updated time.Time) error {
++	comment, err := issues_model.GetCommentByID(ctx, id)
++	if err != nil {
++		return err
++	}
++	updatedUnix := timeutil.TimeStamp(updated.Unix())
++	if updatedUnix <= comment.UpdatedUnix {
++		return nil
++	}
++	content, err := imp.localizeContentAssets(ctx, body, assetTarget{
++		RepoID:      imp.repo.ID,
++		IssueID:     comment.IssueID,
++		CommentID:   comment.ID,
++		UploaderID:  comment.PosterID,
++		CreatedUnix: int64(comment.CreatedUnix),
++	})
++	if err != nil {
++		return err
++	}
++	comment.Content = content
++	comment.UpdatedUnix = updatedUnix
++	_, err = db.GetEngine(ctx).ID(comment.ID).NoAutoTime().Cols("content", "updated_unix").Update(comment)
++	return err
++}
++
+ func reviewComment(issue *issues_model.Issue, reviewID int64, source githubReviewComment) *issues_model.Comment {
+ 	line := reviewCommentLine(source)
+ 	comment := &issues_model.Comment{
+diff --git a/services/githubmetadata/sync_test.go b/services/githubmetadata/sync_test.go
+new file mode 100644
+index 0000000..338023d
+--- /dev/null
++++ b/services/githubmetadata/sync_test.go
+@@ -0,0 +1,80 @@
++// Copyright 2026 The Forgejo Authors. All rights reserved.
++// SPDX-License-Identifier: MIT
++
++package githubmetadata
++
++import (
++	"testing"
++	"time"
++
++	"forgejo.org/models/db"
++	issues_model "forgejo.org/models/issues"
++	repo_model "forgejo.org/models/repo"
++	"forgejo.org/models/unittest"
++	user_model "forgejo.org/models/user"
++	"forgejo.org/modules/timeutil"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestMain(m *testing.M) {
++	unittest.MainTest(m)
++}
++
++func TestImportedCommentEdits(t *testing.T) {
++	require.NoError(t, unittest.PrepareTestDatabase())
++	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
++	imp := &importer{repo: &repo_model.Repository{ID: issue.RepoID}}
++	created := time.Unix(1000, 0).UTC()
++	edited := created.Add(time.Hour)
++
++	for _, tc := range []struct {
++		name          string
++		kind          string
++		importComment func(*issues_model.Issue, int64, string, time.Time) error
++	}{
++		{
++			name: "issue comment", kind: sourceKindIssueComment,
++			importComment: func(issue *issues_model.Issue, sourceID int64, body string, updated time.Time) error {
++				return imp.importIssueComments(t.Context(), issue, []githubEvent{{
++					Event: "commented", ID: sourceID, Body: body, CreatedAt: &created, UpdatedAt: &updated,
++				}})
++			},
++		},
++		{
++			name: "review comment", kind: sourceKindReviewComment,
++			importComment: func(issue *issues_model.Issue, sourceID int64, body string, updated time.Time) error {
++				return imp.importReviewComments(t.Context(), issue, 1, []githubReviewComment{{
++					ID: sourceID, Body: body, CreatedAt: created, UpdatedAt: updated,
++				}})
++			},
++		},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			comment := &issues_model.Comment{
++				Type: issues_model.CommentTypeComment, IssueID: issue.ID,
++				PosterID: user_model.GhostUserID, Content: "original",
++				CreatedUnix: timeutil.TimeStamp(created.Unix()),
++				UpdatedUnix: timeutil.TimeStamp(created.Unix()),
++			}
++			_, err := db.GetEngine(t.Context()).NoAutoTime().Insert(comment)
++			require.NoError(t, err)
++			stored, err := issues_model.GetCommentByID(t.Context(), comment.ID)
++			require.NoError(t, err)
++			require.Equal(t, timeutil.TimeStamp(created.Unix()), stored.UpdatedUnix)
++			sourceID := comment.ID + 1000000
++			require.NoError(t, recordSourceMap(t.Context(), issue.RepoID, tc.kind, sourceID, comment.ID, issue.Index))
++
++			require.NoError(t, tc.importComment(issue, sourceID, "edited", edited))
++			got, err := issues_model.GetCommentByID(t.Context(), comment.ID)
++			require.NoError(t, err)
++			require.Equal(t, "edited", got.Content)
++			require.Equal(t, timeutil.TimeStamp(edited.Unix()), got.UpdatedUnix)
++
++			require.NoError(t, tc.importComment(issue, sourceID, "stale", created))
++			got, err = issues_model.GetCommentByID(t.Context(), comment.ID)
++			require.NoError(t, err)
++			require.Equal(t, "edited", got.Content)
++		})
++	}
++}
