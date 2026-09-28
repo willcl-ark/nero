@@ -1,0 +1,28 @@
+diff --git a/models/db/index.go b/models/db/index.go
+index 923576e..15e7955 100644
+--- a/models/db/index.go
++++ b/models/db/index.go
+@@ -40,13 +40,21 @@ func SyncMaxResourceIndex(ctx context.Context, tableName string, groupID, maxInd
+ 		return err
+ 	}
+ 	if affected == 0 {
+-		// if nothing is updated, the record might not exist or might be larger, it's safe to try to insert it again and then check whether the record exists
+-		_, errIns := e.Exec(fmt.Sprintf("INSERT INTO %s (group_id, max_index) VALUES (?, ?)", tableName), groupID, maxIndex)
++		// An existing index may already be as large as maxIndex.
+ 		var savedIdx int64
+ 		has, err := e.SQL(fmt.Sprintf("SELECT max_index FROM %s WHERE group_id=?", tableName), groupID).Get(&savedIdx)
+ 		if err != nil {
+ 			return err
+ 		}
++		if has {
++			return nil
++		}
++		// If the record is absent, try to insert it, then check whether it exists.
++		_, errIns := e.Exec(fmt.Sprintf("INSERT INTO %s (group_id, max_index) VALUES (?, ?)", tableName), groupID, maxIndex)
++		has, err = e.SQL(fmt.Sprintf("SELECT max_index FROM %s WHERE group_id=?", tableName), groupID).Get(&savedIdx)
++		if err != nil {
++			return err
++		}
+ 		// if the record still doesn't exist, there must be some errors (insert error)
+ 		if !has {
+ 			if errIns == nil {
