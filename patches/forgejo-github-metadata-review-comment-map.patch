@@ -1,5 +1,5 @@
 diff --git a/services/githubmetadata/sync.go b/services/githubmetadata/sync.go
-index 6f27e3c..1b7d8ae 100644
+index 6f27e3c..1d6da8e 100644
 --- a/services/githubmetadata/sync.go
 +++ b/services/githubmetadata/sync.go
 @@ -886,15 +886,6 @@ func (imp *importer) importReview(ctx context.Context, issue *issues_model.Issue
@@ -85,7 +85,7 @@ index 6f27e3c..1b7d8ae 100644
  			if err := imp.updateComment(ctx, sourceMap.LocalID, comment.Body, comment.UpdatedAt); err != nil {
  				return err
  			}
-@@ -996,6 +972,42 @@ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_mod
+@@ -996,6 +972,52 @@ func (imp *importer) importReviewComments(ctx context.Context, issue *issues_mod
  	return nil
  }
  
@@ -108,31 +108,41 @@ index 6f27e3c..1b7d8ae 100644
 +	if len(candidates) == 1 {
 +		return candidates[0], nil
 +	}
-+	line := reviewCommentLine(source)
-+	commitSHA := firstNonEmpty(source.CommitID, source.OriginalCommitID)
-+	var match *issues_model.Comment
-+	for _, candidate := range candidates {
-+		if candidate.Line == line && candidate.CommitSHA == commitSHA {
-+			if match != nil {
-+				return nil, fmt.Errorf("ambiguous legacy review comment %d in review %d", source.ID, reviewID)
++	originalLine := int64PtrValue(source.OriginalLine, source.Line)
++	if source.Side == "LEFT" {
++		originalLine = -originalLine
++	}
++	for _, key := range []struct {
++		line   int64
++		commit string
++	}{
++		{originalLine, firstNonEmpty(source.OriginalCommitID, source.CommitID)},
++		{reviewCommentLine(source), firstNonEmpty(source.CommitID, source.OriginalCommitID)},
++	} {
++		var match *issues_model.Comment
++		for _, candidate := range candidates {
++			if candidate.Line == key.line && candidate.CommitSHA == key.commit {
++				if match != nil {
++					return nil, fmt.Errorf("ambiguous legacy review comment %d in review %d", source.ID, reviewID)
++				}
++				match = candidate
 +			}
-+			match = candidate
++		}
++		if match != nil {
++			return match, nil
 +		}
 +	}
-+	if match == nil {
-+		return nil, fmt.Errorf("missing legacy review comment %d in review %d", source.ID, reviewID)
-+	}
-+	return match, nil
++	return nil, fmt.Errorf("missing legacy review comment %d in review %d", source.ID, reviewID)
 +}
 +
  func (imp *importer) updateComment(ctx context.Context, id int64, body string, updated time.Time) error {
  	comment, err := issues_model.GetCommentByID(ctx, id)
  	if err != nil {
 diff --git a/services/githubmetadata/sync_test.go b/services/githubmetadata/sync_test.go
-index 338023d..37d319f 100644
+index 338023d..a6a8f95 100644
 --- a/services/githubmetadata/sync_test.go
 +++ b/services/githubmetadata/sync_test.go
-@@ -78,3 +78,58 @@ func TestImportedCommentEdits(t *testing.T) {
+@@ -78,3 +78,63 @@ func TestImportedCommentEdits(t *testing.T) {
  		})
  	}
  }
@@ -142,9 +152,11 @@ index 338023d..37d319f 100644
 +	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 +	imp := &importer{repo: &repo_model.Repository{ID: issue.RepoID}}
 +	created := time.Unix(1000, 0).UTC()
++	originalLine := 10
 +	source := githubReviewComment{
 +		ID: 987654, User: &githubUser{Login: "reviewer", ID: 12345},
-+		Body: "original", Path: "src/example.cpp", CommitID: "abc123",
++		Body: "original", Path: "src/example.cpp", CommitID: "abc123", OriginalCommitID: "abc123",
++		Line: &originalLine, OriginalLine: &originalLine,
 +		CreatedAt: created, UpdatedAt: created,
 +	}
 +	comment := reviewComment(issue, 1, source)
@@ -158,6 +170,9 @@ index 338023d..37d319f 100644
 +	require.NoError(t, err)
 +	require.NoError(t, recordSourceMap(t.Context(), issue.RepoID, sourceKindReviewComment, source.ID, 0, issue.Index))
 +
++	rebasedLine := 20
++	source.Line = &rebasedLine
++	source.CommitID = "rebased"
 +	source.Body = "edited"
 +	source.UpdatedAt = created.Add(time.Hour)
 +	require.NoError(t, imp.importReviewComments(t.Context(), issue, 1, []githubReviewComment{source}))
