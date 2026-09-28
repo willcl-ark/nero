@@ -32,6 +32,11 @@ in
     interface = "enp6s0";
   };
 
+  services.journald.extraConfig = ''
+    SystemMaxUse=12G
+    MaxRetentionSec=30day
+  '';
+
   services.bitcoinDnsSeed.mainnet = {
     enable = true;
     threads = 200;
