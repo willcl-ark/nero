@@ -1,0 +1,27 @@
+diff --git a/services/githubmetadata/sync.go b/services/githubmetadata/sync.go
+index 53ab102..ef6dd1b 100644
+--- a/services/githubmetadata/sync.go
++++ b/services/githubmetadata/sync.go
+@@ -28,6 +28,7 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/util"
++	notify_service "forgejo.org/services/notify"
+ )
+ 
+ const (
+@@ -518,7 +519,13 @@ func (imp *importer) importPullFile(ctx context.Context, filename string) error
+ 	if err := imp.importIssueComments(ctx, issue, data.Events); err != nil {
+ 		return err
+ 	}
+-	return imp.importReviews(ctx, issue, pr, data.Events, data.Comments)
++	if err := imp.importReviews(ctx, issue, pr, data.Events, data.Comments); err != nil {
++		return err
++	}
++	if !issue.IsClosed && !pr.HasMerged {
++		notify_service.PullRequestSynchronized(ctx, user_model.NewGhostUser(), pr)
++	}
++	return nil
+ }
+ 
+ func readJSON(filename string, v any) error {

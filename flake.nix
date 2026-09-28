@@ -88,7 +88,10 @@
                     src = inputs.forgejo-src;
                     vendorHash = "sha256-cb6f7ZX3pG95EEZotGXn6+YUJN59SFNVHFTejFJ6y28=";
                     doCheck = false;
-                    patches = (prev.forgejo.patches or []) ++ [ ./patches/forgejo-review-bot-comments.patch ];
+                    patches = (prev.forgejo.patches or []) ++ [
+                      ./patches/forgejo-review-bot-comments.patch
+                      ./patches/forgejo-github-metadata-sync-webhook.patch
+                    ];
                     postPatch = ''
                       ${prev.forgejo.postPatch}
                       rm -rf vendor
