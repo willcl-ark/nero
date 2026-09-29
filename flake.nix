@@ -4,6 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    llm-agents.url = "github:numtide/llm-agents.nix";
     dnsseedrs = {
       url = "github:willcl-ark/dnsseedrs";
       flake = false;
@@ -69,6 +70,7 @@
 
         nixosConfigurations.nero = inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
+          specialArgs.codex = inputs.llm-agents.packages.x86_64-linux.codex;
           modules = [
             inputs.disko.nixosModules.disko
             inputs.sops-nix.nixosModules.sops
