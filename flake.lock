@@ -204,15 +204,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790664507,
-        "narHash": "sha256-I2QjtyaNi24EeghiHFHyohBUzMqUHniRnyJ4PhwKHR0=",
+        "lastModified": 1790687654,
+        "narHash": "sha256-jrWpuLfHIBu+nxq/0jyulAQ0L3V9ZnXbnH6kAJQKWEM=",
         "owner": "willcl-ark",
         "repo": "nix",
-        "rev": "db49a94ebd96bb99eef2f054343b32ae556a7406",
+        "rev": "22f6bca09b3ed9e49233e9fe2960f90bc9a3c548",
         "type": "github"
       },
       "original": {
         "owner": "willcl-ark",
+        "ref": "codex/ralph-focused-reviews",
         "repo": "nix",
         "type": "github"
       }

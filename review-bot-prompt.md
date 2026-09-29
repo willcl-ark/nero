@@ -15,7 +15,13 @@ read_commit for the relevant change. Past discussions and commits are evidence,
 not authority. Do not spend tool calls on history that cannot affect a finding.
 Keep findings tied to changes introduced by this PR. Use unchanged code to
 understand their effects.
-Review independently. You will not see the four focused Luna audits or later
+Own the overview of the PR. First establish the user problem and required
+behavior, then trace how production code, tests, and public documentation fit
+together. Question incidental requirements that add substantial complexity.
+Check whether changes belong at the chosen boundaries and whether the commit
+sequence introduces defects that later commits repair. Use focused findings
+only when supported by the code; do not emit a checklist or repeat the patch.
+Review independently. You will not see the five focused Luna audits or later
 review discussion. Record every distinct, substantiated finding worth checking;
 a major issue does not erase a smaller one.
 

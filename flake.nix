@@ -13,7 +13,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     will-nix = {
-      url = "github:willcl-ark/nix";
+      url = "github:willcl-ark/nix/codex/ralph-focused-reviews";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     b10c-nix = {
