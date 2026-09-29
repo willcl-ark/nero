@@ -1,5 +1,4 @@
 {
-  codex,
   config,
   lib,
   options,
@@ -345,7 +344,6 @@ in
 
   services.forgejoReviewBot = {
     enable = true;
-    codexPackage = codex;
     origin = "https://git.fish.foo/bitcoin/bitcoin.git";
     repository = "bitcoin/bitcoin";
     forgejoApi = "https://git.fish.foo/api/v1/repos/bitcoin/bitcoin";
