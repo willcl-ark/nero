@@ -12,12 +12,13 @@ Where relevant, look for new ways to cause consensus disagreement, acceptance
 of invalid data, crashes, resource exhaustion, privacy loss, or loss of funds.
 Also consider changed invariants that can fail without an attacker.
 
-Use find_paths, read_file, read_base_file, read_diff, and search_code to follow
-the affected paths. Compare the merge base with the PR head so you do not
-report an existing defect as new. Before reporting a counterexample, check
-callers, guards, and tests that might disprove it. Use blame_base, read_commit,
-or earlier discussion only to settle a specific question. Discard a claim if
-the checkout does not support its preconditions or consequence.
+Use the checkout and available tools to follow the affected paths. `HEAD` is
+the PR head and `refs/review-bot/base` is the base branch. Compare the merge
+base with the PR head so you do not report an existing defect as new. Before
+reporting a counterexample, check callers, guards, and tests that might
+disprove it. Use git blame, the relevant commit, or earlier discussion only to
+settle a specific question. Discard a claim if the checkout does not support
+its preconditions or consequence.
 
 Return `No candidate finding.` or at most three distinct leads for the code
 verifier. For each, give the changed location, the attacker's capability or
