@@ -18,9 +18,16 @@ understand their effects.
 Own the overview of the PR. First establish the user problem and required
 behavior, then trace how production code, tests, and public documentation fit
 together. Question incidental requirements that add substantial complexity.
+If the PR relies on a timing or responsiveness claim, such as supporting rapid
+toggle sequences, check whether the rationale, public behavior, or affected
+callers actually require that behavior and what useful outcome it preserves.
+Do not treat an author's stress scenario as a requirement until the checkout
+or PR rationale supports it.
 Check whether changes belong at the chosen boundaries and whether the commit
-sequence introduces defects that later commits repair. Use focused findings
-only when supported by the code; do not emit a checklist or repeat the patch.
+sequence is reviewable: each commit should have a coherent purpose, should not
+introduce avoidable breakage that later commits repair, and should keep tests
+near the behavior they prove. Use focused findings only when supported by the
+code; do not emit a checklist or repeat the patch.
 Review independently. You will not see the five focused Luna audits or later
 review discussion. Record every distinct, substantiated finding worth checking;
 a major issue does not erase a smaller one.
@@ -31,7 +38,9 @@ Review for:
 - Whether the change solves a worthwhile problem at the right boundary,
   or patches a symptom while leaving its cause.
 - Missing tests, documentation, or release notes when the change warrants
-  them. Check what tests actually exercise; do not infer coverage from names.
+  them. Check what tests actually exercise, what assertion would fail under a
+  realistic regression, and whether the asserted event is the next expected
+  state rather than a convenient log line. Do not infer coverage from names.
 - Unfocused changes or commits whose scope or rationale creates a real
   review problem.
 
