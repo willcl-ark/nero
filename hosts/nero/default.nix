@@ -292,6 +292,8 @@ in
   services.forgejo.settings.migrations.ALLOWED_DOMAINS = lib.mkForce
     "github.com,*.github.com,github-production-user-asset-*.s3.amazonaws.com,cygwin.com,sourceware.org,gitlab.com,*.gitlab.com";
   services.forgejo.settings.migrations.ALLOW_LOCALNETWORKS = lib.mkForce true;
+  services.forgejo.settings.mirror.MIN_INTERVAL = "2m";
+  services.forgejo.settings."cron.update_mirrors".SCHEDULE = "@every 1m";
   services.forgejo.settings."cron.update_github_metadata_mirrors".SCHEDULE = "@every 1m";
   services.forgejo.settings.service.DISABLE_REGISTRATION = lib.mkForce false;
 
@@ -309,7 +311,7 @@ in
     owner = "bitcoin";
     repository = "bitcoin";
     personalAccessTokenFile = config.sops.secrets.github-metadata-backup-github-token.path;
-    timerOnCalendar = "*-*-* *:00/10:00 UTC";
+    timerOnCalendar = "*-*-* *:00/2:00 UTC";
 
     pushToRemotes = [
       {
