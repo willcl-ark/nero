@@ -13,7 +13,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     will-nix = {
-      url = "github:willcl-ark/nix/codex/ralph-focused-reviews";
+      url = "github:willcl-ark/nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     b10c-nix = {
@@ -93,6 +93,7 @@
                       ./patches/forgejo-github-metadata-sync-webhook.patch
                       ./patches/forgejo-github-metadata-comment-edits.patch
                       ./patches/forgejo-github-metadata-review-comment-map.patch
+                      ./patches/forgejo-github-metadata-pending-pull-sync.patch
                       ./patches/forgejo-resource-index-sync.patch
                     ];
                     postPatch = ''

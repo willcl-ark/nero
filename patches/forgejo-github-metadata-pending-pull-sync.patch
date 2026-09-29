@@ -1,0 +1,208 @@
+--- a/services/githubmetadata/sync.go
++++ b/services/githubmetadata/sync.go
+@@ -23,6 +23,7 @@
+ 	"forgejo.org/models/unit"
+ 	user_model "forgejo.org/models/user"
+ 	"forgejo.org/modules/git"
++	"forgejo.org/modules/gitrepo"
+ 	"forgejo.org/modules/label"
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+@@ -32,7 +33,8 @@
+ )
+ 
+ const (
+-	defaultInterval = 12 * time.Hour
++	defaultInterval      = 12 * time.Hour
++	pendingPullSyncsFile = ".forgejo-pending-pull-syncs.json"
+ 
+ 	sourceKindIssue         = "issue"
+ 	sourceKindPull          = "pull"
+@@ -319,6 +321,10 @@
+ 	if err != nil {
+ 		return err
+ 	}
++	pendingPullSyncs, err := readPendingPullSyncs(metadataMirror.MetadataPath)
++	if err != nil {
++		return err
++	}
+ 	notifyPullSync := false
+ 	if !initial && !cloned && metadataMirror.LastCommit != "" {
+ 		_, _, err := git.NewCommand(ctx, "merge-base", "--is-ancestor").
+@@ -336,10 +342,17 @@
+ 		}
+ 	}
+ 	for _, filename := range pullFiles {
+-		if err := imp.importPullFile(ctx, filename, notifyPullSync); err != nil {
++		if err := imp.importPullFile(ctx, filename, notifyPullSync, &pendingPullSyncs); err != nil {
+ 			return fmt.Errorf("import pull metadata %s: %w", filename, err)
+ 		}
+ 	}
++	if err := writePendingPullSyncs(metadataMirror.MetadataPath, pendingPullSyncs); err != nil {
++		return err
++	}
++	pendingPullSyncs = retryPendingPullSyncs(ctx, repo, pendingPullSyncs)
++	if err := writePendingPullSyncs(metadataMirror.MetadataPath, pendingPullSyncs); err != nil {
++		return err
++	}
+ 
+ 	lastBackup, err := readLastBackupUnix(metadataMirror.MetadataPath)
+ 	if err != nil {
+@@ -517,7 +530,12 @@
+ 	return imp.importIssueComments(ctx, issue, data.Events)
+ }
+ 
+-func (imp *importer) importPullFile(ctx context.Context, filename string, notifyPullSync bool) error {
++func (imp *importer) importPullFile(
++	ctx context.Context,
++	filename string,
++	notifyPullSync bool,
++	pendingPullSyncs *[]pendingPullSync,
++) error {
+ 	var data pullFile
+ 	if err := readJSON(filename, &data); err != nil {
+ 		return err
+@@ -533,11 +551,116 @@
+ 		return err
+ 	}
+ 	if notifyPullSync && !issue.IsClosed && !pr.HasMerged {
+-		notify_service.PullRequestSynchronized(ctx, user_model.NewGhostUser(), pr)
++		*pendingPullSyncs = enqueuePullSync(*pendingPullSyncs, pendingPullSync{
++			Index: pr.Index, HeadSHA: data.Pull.Head.SHA,
++		})
+ 	}
+ 	return nil
+ }
+ 
++type pendingPullSync struct {
++	Index   int64  `json:"index"`
++	HeadSHA string `json:"head_sha"`
++}
++
++func enqueuePullSync(pending []pendingPullSync, next pendingPullSync) []pendingPullSync {
++	for i := range pending {
++		if pending[i].Index == next.Index {
++			pending[i] = next
++			return pending
++		}
++	}
++	return append(pending, next)
++}
++
++func readPendingPullSyncs(metadataPath string) ([]pendingPullSync, error) {
++	data, err := os.ReadFile(filepath.Join(metadataPath, pendingPullSyncsFile))
++	if errors.Is(err, os.ErrNotExist) {
++		return nil, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	var pending []pendingPullSync
++	if err := json.Unmarshal(data, &pending); err != nil {
++		return nil, fmt.Errorf("read pending pull request notifications: %w", err)
++	}
++	return pending, nil
++}
++
++func writePendingPullSyncs(metadataPath string, pending []pendingPullSync) error {
++	filename := filepath.Join(metadataPath, pendingPullSyncsFile)
++	if len(pending) == 0 {
++		if err := os.Remove(filename); err != nil && !errors.Is(err, os.ErrNotExist) {
++			return err
++		}
++		return nil
++	}
++	sort.Slice(pending, func(i, j int) bool { return pending[i].Index < pending[j].Index })
++	data, err := json.Marshal(pending)
++	if err != nil {
++		return err
++	}
++	tmp, err := os.CreateTemp(metadataPath, pendingPullSyncsFile+"-*")
++	if err != nil {
++		return err
++	}
++	tmpName := tmp.Name()
++	defer os.Remove(tmpName)
++	if _, err := tmp.Write(data); err != nil {
++		tmp.Close()
++		return err
++	}
++	if err := tmp.Close(); err != nil {
++		return err
++	}
++	return os.Rename(tmpName, filename)
++}
++
++func retryPendingPullSyncs(
++	ctx context.Context,
++	repo *repo_model.Repository,
++	pending []pendingPullSync,
++) []pendingPullSync {
++	if len(pending) == 0 {
++		return nil
++	}
++	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
++	if err != nil {
++		log.Warn("Unable to check pending pull request refs for %s: %v", repo.FullName(), err)
++		return pending
++	}
++
++	var ready []*issues_model.PullRequest
++	remaining := make([]pendingPullSync, 0, len(pending))
++	for _, item := range pending {
++		pr, err := issues_model.GetPullRequestByIndex(ctx, repo.ID, item.Index)
++		if err != nil {
++			log.Warn("Unable to load pending pull request %s#%d: %v", repo.FullName(), item.Index, err)
++			remaining = append(remaining, item)
++			continue
++		}
++		if pr.Issue.IsClosed || pr.HasMerged {
++			continue
++		}
++		commitID, err := gitRepo.GetRefCommitID(pr.GetGitRefName())
++		if err != nil || commitID != item.HeadSHA {
++			log.Trace(
++				"Deferring pull request notification for %s#%d until head %s is mirrored",
++				repo.FullName(), item.Index, item.HeadSHA,
++			)
++			remaining = append(remaining, item)
++			continue
++		}
++		ready = append(ready, pr)
++	}
++	gitRepo.Close()
++	for _, pr := range ready {
++		notify_service.PullRequestSynchronized(ctx, user_model.NewGhostUser(), pr)
++	}
++	return remaining
++}
++
+ func readJSON(filename string, v any) error {
+ 	bs, err := os.ReadFile(filename)
+ 	if err != nil {
+--- a/services/githubmetadata/sync_test.go
++++ b/services/githubmetadata/sync_test.go
+@@ -139,3 +139,23 @@
+ 	require.NoError(t, err)
+ 	require.Equal(t, source.Body, got.Content)
+ }
++
++func TestPendingPullSyncsPersistAndReplaceHead(t *testing.T) {
++	dir := t.TempDir()
++	pending := enqueuePullSync(nil, pendingPullSync{Index: 36378, HeadSHA: "old"})
++	pending = enqueuePullSync(pending, pendingPullSync{Index: 36378, HeadSHA: "new"})
++	pending = enqueuePullSync(pending, pendingPullSync{Index: 36379, HeadSHA: "other"})
++	require.NoError(t, writePendingPullSyncs(dir, pending))
++
++	got, err := readPendingPullSyncs(dir)
++	require.NoError(t, err)
++	require.Equal(t, []pendingPullSync{
++		{Index: 36378, HeadSHA: "new"},
++		{Index: 36379, HeadSHA: "other"},
++	}, got)
++
++	require.NoError(t, writePendingPullSyncs(dir, nil))
++	got, err = readPendingPullSyncs(dir)
++	require.NoError(t, err)
++	require.Empty(t, got)
++}

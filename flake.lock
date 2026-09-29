@@ -213,7 +213,6 @@
       },
       "original": {
         "owner": "willcl-ark",
-        "ref": "codex/ralph-focused-reviews",
         "repo": "nix",
         "type": "github"
       }
