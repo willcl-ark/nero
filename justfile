@@ -126,6 +126,13 @@ update:
 update-modules:
     nix flake update {{module_inputs}}
 
+# Update bot
+update-bot:
+    nix flake update will-nix
+    git add flake.lock
+    git commit -m "bump to new bot version"
+    just switch
+
 logs network="mainnet":
     ssh -p {{ssh_port}} {{target}} "systemctl status dnsseedrs-{{network}} && journalctl -f -u dnsseedrs-{{network}}"
 
