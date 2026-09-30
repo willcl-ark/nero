@@ -204,11 +204,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790763293,
-        "narHash": "sha256-1RtbLu6Zejf6FNHub+GryJJLiHYDA6MMonG3I0e2OaI=",
+        "lastModified": 1790764275,
+        "narHash": "sha256-8hHXBvaF0MYGW3bLOxBm8jhAMZRcXGPYj3mxqX1uk5Q=",
         "owner": "willcl-ark",
         "repo": "nix",
-        "rev": "68fb4401a1a289131f9091761b1fad1035fb6ef9",
+        "rev": "f7702ca59c5c7d440ac71798b2f58c028ea0f060",
         "type": "github"
       },
       "original": {
