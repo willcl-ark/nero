@@ -344,7 +344,18 @@ in
       }
     }
 
-    reverse_proxy 127.0.0.1:8765
+    handle_path /traces/* {
+      root * ${config.services.forgejoReviewBot.reportDir}
+      header {
+        Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
+        X-Content-Type-Options nosniff
+      }
+      file_server
+    }
+
+    handle {
+      reverse_proxy 127.0.0.1:8765
+    }
   '';
 
   services.forgejoReviewBot = {
@@ -357,6 +368,8 @@ in
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
     botLogin = "ralph";
+    reportDir = "/var/lib/forgejo-review-reports";
+    reportBaseUrl = "https://review.fish.foo/traces";
   };
 
   systemd.services.forgejo-review-bot = {
