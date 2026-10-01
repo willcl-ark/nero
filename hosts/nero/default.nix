@@ -344,6 +344,17 @@ in
       }
     }
 
+    redir /stats /stats/
+    handle_path /stats/* {
+      root * ${config.services.forgejoReviewBot.reportDir}/stats
+      header {
+        Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
+        X-Content-Type-Options nosniff
+        Cache-Control "no-cache"
+      }
+      file_server
+    }
+
     handle_path /traces/* {
       root * ${config.services.forgejoReviewBot.reportDir}
       header {
