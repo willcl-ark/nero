@@ -14,7 +14,7 @@ Modules currently consumed by this repo:
 - **radicle-mirror** -- public Radicle seed, explorer frontend, Bitcoin Core mirror
 - **stuntman** -- STUNTMAN STUN server and btcpunch rendezvous helper
 - **forgejo-site** -- Forgejo, Anubis, Caddy route, secrets, admin bootstrap
-- **forgejo-review-bot** -- first-pass pull request reviews
+- **ralph** -- first-pass pull request reviews
 
 Host-local configuration stays here: hardware/disko config, domains, encrypted
 secret file paths, host sizing, and deployment commands.
@@ -30,7 +30,7 @@ github.com/willcl-ark/nix
     bitcoin-dnsseed/
     bitcoin-core-guix-substitutes/
     forgejo-site/
-    forgejo-review-bot/
+    ralph/
     radicle-mirror/
     stuntman/
 ```
@@ -40,7 +40,7 @@ expose the service interfaces; this repo supplies site-local values such as
 domains, secret paths, and data placement.
 
 Bitcoin Core review prompts and model assignments live in the shared
-[will-nix review bot package](https://github.com/willcl-ark/nix/tree/master/pkgs/forgejo-review-bot).
+[will-nix ralph package](https://github.com/willcl-ark/nix/tree/master/pkgs/ralph).
 Nero uses the package defaults through its pinned `will-nix` input.
 
 For unpublished module changes, `just switch-local-nix` copies the local

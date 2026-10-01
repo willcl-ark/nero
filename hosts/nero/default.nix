@@ -82,22 +82,22 @@ in
   };
 
   sops.secrets.openai-api-key = {
-    owner = "forgejo-review-bot";
+    owner = "ralph";
     mode = "0400";
   };
 
   sops.secrets.ppq-api-key = {
-    owner = "forgejo-review-bot";
+    owner = "ralph";
     mode = "0400";
   };
 
   sops.secrets.forgejo-review-bot-webhook-secret = {
-    owner = "forgejo-review-bot";
+    owner = "ralph";
     mode = "0400";
   };
 
   sops.secrets.forgejo-review-bot-token = {
-    owner = "forgejo-review-bot";
+    owner = "ralph";
     mode = "0400";
   };
 
@@ -346,7 +346,7 @@ in
 
     redir /stats /stats/
     handle_path /stats/* {
-      root * ${config.services.forgejoReviewBot.reportDir}/stats
+      root * ${config.services.ralph.reportDir}/stats
       header {
         Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
         X-Content-Type-Options nosniff
@@ -356,7 +356,7 @@ in
     }
 
     handle_path /traces/* {
-      root * ${config.services.forgejoReviewBot.reportDir}
+      root * ${config.services.ralph.reportDir}
       header {
         Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
         X-Content-Type-Options nosniff
@@ -369,7 +369,7 @@ in
     }
   '';
 
-  services.forgejoReviewBot = {
+  services.ralph = {
     enable = true;
     origin = "https://git.fish.foo/bitcoin/bitcoin.git";
     repository = "bitcoin/bitcoin";
@@ -379,11 +379,14 @@ in
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
     botLogin = "ralph";
+    # Keep the existing queue, spend history and editable review comments.
+    stateDir = "/var/lib/forgejo-review-bot";
+    commentMarker = "<!-- forgejo-review-bot:bitcoin/bitcoin -->";
     reportDir = "/var/lib/forgejo-review-reports";
     reportBaseUrl = "https://review.fish.foo/traces";
   };
 
-  systemd.services.forgejo-review-bot = {
+  systemd.services.ralph = {
     after = [ "sops-install-secrets.service" ];
     wants = [ "sops-install-secrets.service" ];
   };

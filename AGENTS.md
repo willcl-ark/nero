@@ -19,12 +19,12 @@
 
 Reusable NixOS modules and packages live in `/home/will/src/nix`. This repo
 consumes that flake as the `will-nix` input in `flake.nix`; host domains,
-secrets, and deployment choices stay here. The Forgejo review bot follows
+secrets, and deployment choices stay here. The ralph follows
 that split. Its shared module and package are edited in the Nix repo, while
 Nero supplies its site-specific configuration.
 
 The Bitcoin Core review prompts and model assignments live only in the shared
-Nix package at `/home/will/src/nix/pkgs/forgejo-review-bot/` (`prompt.md` and
+Nix package at `/home/will/src/nix/pkgs/ralph/` (`prompt.md` and
 `audits/`). Nero uses the module defaults. Edit those files in the Nix repo,
 then publish the change and update Nero's `will-nix` pin before `just switch`.
 For an unpublished shared change, use `just switch-local-nix` instead.
@@ -51,6 +51,6 @@ just switch
 
 `just update-modules` runs the same input update command.
 
-The input is named `will-nix`, not `review-bot`. Review the `flake.lock` diff
+The input is named `will-nix`, not `ralph`. Review the `flake.lock` diff
 before committing it. Do not replace the committed GitHub input with a
 machine-specific absolute path.

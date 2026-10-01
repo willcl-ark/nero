@@ -78,7 +78,7 @@
             inputs.will-nix.nixosModules.bitcoin-core-guix-substitutes
             inputs.will-nix.nixosModules.stuntman
             inputs.will-nix.nixosModules.forgejo-site
-            inputs.will-nix.nixosModules.forgejo-review-bot
+            inputs.will-nix.nixosModules.ralph
             inputs.niks3.nixosModules.niks3
             inputs.b10c-nix.nixosModules.default.github-metadata-backup
             {
@@ -89,7 +89,7 @@
                     vendorHash = "sha256-cb6f7ZX3pG95EEZotGXn6+YUJN59SFNVHFTejFJ6y28=";
                     doCheck = false;
                     patches = (prev.forgejo.patches or []) ++ [
-                      ./patches/forgejo-review-bot-comments.patch
+                      ./patches/ralph-comments.patch
                       ./patches/forgejo-github-metadata-sync-webhook.patch
                       ./patches/forgejo-github-metadata-comment-edits.patch
                       ./patches/forgejo-github-metadata-review-comment-map.patch
