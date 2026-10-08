@@ -371,8 +371,24 @@ in
       file_server
     }
 
-    handle {
+    @ralph_webhook {
+      method POST
+      path /webhooks/forgejo
+    }
+    handle @ralph_webhook {
       reverse_proxy 127.0.0.1:8765
+    }
+
+    @ralph_badge {
+      method GET
+      path_regexp ^/assets/bitcoin/bitcoin/[1-9][0-9]{0,18}\.png$
+    }
+    handle @ralph_badge {
+      reverse_proxy 127.0.0.1:8765
+    }
+
+    handle {
+      respond 404
     }
   '';
 
