@@ -17,6 +17,7 @@ in
     ./guix-offload.nix
     ./hardware-configuration.nix
     ./dnsseedrs-wireguard.nix
+    ./monitoring.nix
   ];
 
   networking.hostName = "nero";
