@@ -303,6 +303,12 @@ in
   services.forgejo.settings.service.DISABLE_REGISTRATION = lib.mkForce false;
 
   services.forgejo.dump.age = "7d";
+  services.forgejo.settings."cron.archive_cleanup" = {
+    SCHEDULE = "@every 1h";
+    OLDER_THAN = "1h";
+  };
+  systemd.services.forgejo-dump.serviceConfig.ExecStart = lib.mkForce
+    "${lib.getExe config.services.forgejo.package} dump --type ${config.services.forgejo.dump.type} --skip-repo-archives";
 
   systemd.services.forgejo.preStart = lib.mkAfter ''
     install -D -m 0644 ${./forgejo-custom/footer.tmpl} \
