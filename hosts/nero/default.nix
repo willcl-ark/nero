@@ -402,6 +402,7 @@ in
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
     botLogin = "ralph";
+    reviewBudgetUsd = 30.0;
     # Keep the existing queue, spend history and editable review comments.
     stateDir = "/var/lib/forgejo-review-bot";
     commentMarker = "<!-- forgejo-review-bot:bitcoin/bitcoin -->";
