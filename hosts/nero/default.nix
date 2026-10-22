@@ -355,7 +355,7 @@ in
     handle_path /stats/* {
       root * ${config.services.ralph.reportDir}/stats
       header {
-        Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
+        Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'"
         X-Content-Type-Options nosniff
         Cache-Control "no-cache"
       }
