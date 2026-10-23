@@ -118,8 +118,17 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStop = "${ip} netns del ${namespace}";
     };
+    # Remove the veth explicitly because namespace references can outlive its name.
+    # postStop also runs after a partially completed start.
+    postStop = ''
+      if ${ip} link show ${hostVeth} > /dev/null 2>&1; then
+        ${ip} link del ${hostVeth}
+      fi
+      if [ -e /run/netns/${namespace} ]; then
+        ${ip} netns del ${namespace}
+      fi
+    '';
     script = ''
       ${ip} netns add ${namespace}
       ${ip} link add ${hostVeth} type veth peer name ${namespaceVeth} netns ${namespace}
