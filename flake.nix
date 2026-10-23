@@ -74,7 +74,6 @@
             inputs.sops-nix.nixosModules.sops
             inputs.will-nix.nixosModules.bitcoin-dnsseed
             dnsseedrsPackageModule
-            inputs.will-nix.nixosModules.radicle-mirror
             inputs.will-nix.nixosModules.bitcoin-core-guix-substitutes
             inputs.will-nix.nixosModules.stuntman
             inputs.will-nix.nixosModules.forgejo-site

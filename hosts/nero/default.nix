@@ -64,12 +64,6 @@ in
   '';
   networking.firewall.allowedTCPPorts = [ 2222 ];
 
-  sops.secrets.radicle-private-key = {
-    owner = "radicle";
-    group = "radicle";
-    mode = "0400";
-  };
-
   sops.secrets.github-metadata-backup-github-token = {
     owner = "gmb-bitcoin";
     group = "github-metadata";
@@ -197,25 +191,6 @@ in
   services.caddy.virtualHosts."cache.nix.fish.foo".extraConfig = ''
     reverse_proxy 127.0.0.1:5751
   '';
-
-  services.radicleMirror = {
-    enable = true;
-    domain = "radicle.fish.foo";
-
-    seed = {
-      enable = true;
-      privateKeyFile = config.sops.secrets.radicle-private-key.path;
-      publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKPDAHBnAYYRqKFeDBC7VhYa4e6KbIV0VXdW6Bk1QMxZ radicle";
-      nodeId = "z6MkqUWxg7edhgBufSVEb39cEmndNEg8FuMhqCKaMB85UXDJ";
-    };
-
-    frontend.enable = true;
-
-    bitcoinMirror = {
-      enable = true;
-      delegateDids = [ "did:key:z6MkminBAVqNKgPS7bT6HqDqbXaE31jqZ8p3eXMAC2czwHJn" ];
-    };
-  };
 
   services.bitcoinCoreGuixSubstitutes = {
     enable = true;
@@ -411,11 +386,6 @@ in
   };
 
   systemd.services.ralph = {
-    after = [ "sops-install-secrets.service" ];
-    wants = [ "sops-install-secrets.service" ];
-  };
-
-  systemd.services.radicle-node = {
     after = [ "sops-install-secrets.service" ];
     wants = [ "sops-install-secrets.service" ];
   };

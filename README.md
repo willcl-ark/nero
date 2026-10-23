@@ -11,7 +11,6 @@ Modules currently consumed by this repo:
 
 - **bitcoin-dnsseed** -- `dnsseedrs`, CoreDNS, DNSSEC secrets, seed dumps, Tor/I2P
 - **bitcoin-core-guix-substitutes** -- Guix publish and Bitcoin Core build profiles
-- **radicle-mirror** -- public Radicle seed, explorer frontend, Bitcoin Core mirror
 - **stuntman** -- STUNTMAN STUN server and btcpunch rendezvous helper
 - **forgejo-site** -- Forgejo, Anubis, Caddy route, secrets, admin bootstrap
 - **ralph** -- first-pass pull request reviews
@@ -31,7 +30,6 @@ github.com/willcl-ark/nix
     bitcoin-core-guix-substitutes/
     forgejo-site/
     ralph/
-    radicle-mirror/
     stuntman/
 ```
 
@@ -55,7 +53,6 @@ Managed secrets:
 - Cloudflare API token (for Caddy ACME DNS challenges)
 - DNSSEC keys (ZSK + KSK per network, deployed as binary files)
 - Forgejo secrets and mailer password
-- Radicle private key
 - Guix substitute signing keys
 
 ## Usage
