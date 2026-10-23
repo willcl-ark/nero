@@ -278,6 +278,15 @@ in
   services.forgejo.settings."cron.update_github_metadata_mirrors".SCHEDULE = "@every 1m";
   services.forgejo.settings.service.DISABLE_REGISTRATION = lib.mkForce false;
 
+  services.forgejo.settings.repository.DISABLE_DOWNLOAD_SOURCE_ARCHIVES = true;
+
+  # Reject archive requests before Anubis can fetch them for Open Graph metadata.
+  # Forgejo's archive setting does not cover the API download routes.
+  services.caddy.virtualHosts."git.fish.foo".extraConfig = ''
+    @sourceArchives path_regexp ^/([^/]+/[^/]+/archive|api/v1/repos/[^/]+/[^/]+/(archive|tarball|zipball|bundle))(/|$)
+    respond @sourceArchives 404
+  '';
+
   services.forgejo.dump.age = "7d";
   services.forgejo.settings."cron.archive_cleanup" = {
     SCHEDULE = "@every 1h";
