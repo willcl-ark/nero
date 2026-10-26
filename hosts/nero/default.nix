@@ -91,6 +91,11 @@ in
     mode = "0400";
   };
 
+  sops.secrets.ralph-telegram-token = {
+    owner = "ralph";
+    mode = "0400";
+  };
+
   sops.secrets.ralph-github-api-key = {
     owner = "ralph";
     mode = "0400";
@@ -390,6 +395,11 @@ in
     ppqKeyFile = config.sops.secrets.ppq-api-key.path;
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
+    telegram = {
+      enable = true;
+      botTokenFile = config.sops.secrets.ralph-telegram-token.path;
+      chatId = "448332502";
+    };
     githubPostMajorFindings = false;
     githubTokenFile = config.sops.secrets.ralph-github-api-key.path;
     githubRepository = "bitcoin/bitcoin";

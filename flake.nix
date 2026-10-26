@@ -13,7 +13,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     will-nix = {
-      url = "github:willcl-ark/nix/ralph-tool";
+      url = "github:willcl-ark/nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     b10c-nix = {
