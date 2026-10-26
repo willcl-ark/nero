@@ -56,6 +56,20 @@ authenticates Ralph to the proxy. Only the proxy user can read the upstream
 OAuth files. Individual stages can be changed with `engineConfig.stages`; see
 the [shared module documentation](https://github.com/willcl-ark/nix/blob/master/modules/ralph/README.md).
 
+The Codex and Claude plans are each $200/month, as supplied by the operator.
+Those fees are separate from token usage and are not returned by quota endpoints.
+Ralph's stats emphasize recorded requests/tokens and live account quota windows.
+Existing API-equivalent admission budgets remain workload guardrails.
+
+The built-in management UI is enabled on loopback with a separate
+`cli-proxy-api-management-key` secret. It is not the inference client key.
+Forward it with `ssh -p 2222 -L 8317:127.0.0.1:8317 root@nero`, then open
+`http://localhost:8317/management.html` and enter the management key from
+`/run/secrets/cli-proxy-api-management-key` on Nero. Remote management remains
+disabled. The stats service gets this root-owned key through a systemd credential;
+Ralph model requests and Telegram do not receive it. The Usage page publishes
+sanitized quota windows and reset times, without account names or credentials.
+
 Apply this configuration from the local checkout after active reviews finish:
 
 ```sh

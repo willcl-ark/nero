@@ -16,6 +16,10 @@ in
     mode = "0400";
   };
 
+  sops.secrets.cli-proxy-api-management-key = {
+    mode = "0400";
+  };
+
   sops.templates."cli-proxy-api.yaml" = {
     owner = "cli-proxy-api";
     mode = "0400";
@@ -25,8 +29,9 @@ in
         host: "127.0.0.1"
         port: 8317
       management:
-        secret-key: ""
-        disable-control-panel: true
+        secret-key: "${config.sops.placeholder.cli-proxy-api-management-key}"
+        allow-remote: false
+        disable-control-panel: false
       access:
         api-keys:
           - "${config.sops.placeholder.cli-proxy-api-key}"
@@ -41,6 +46,11 @@ in
   services.ralph = {
     openaiApiBase = "http://127.0.0.1:8317/v1";
     openaiKeyFile = config.sops.secrets.cli-proxy-api-key.path;
+    subscriptionUsage = {
+      enable = true;
+      managementUrl = "http://127.0.0.1:8317";
+      managementKeyFile = config.sops.secrets.cli-proxy-api-management-key.path;
+    };
   };
 
   systemd.services.cli-proxy-api = {
