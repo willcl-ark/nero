@@ -412,6 +412,11 @@ in
     reportBaseUrl = "https://review.fish.foo/traces";
   };
 
+  systemd.services.ralph-telegram = {
+    after = [ "sops-install-secrets.service" ];
+    wants = [ "sops-install-secrets.service" ];
+  };
+
   systemd.services.ralph = {
     after = [ "sops-install-secrets.service" ];
     wants = [ "sops-install-secrets.service" ];
