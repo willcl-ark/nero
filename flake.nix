@@ -78,6 +78,7 @@
             inputs.will-nix.nixosModules.stuntman
             inputs.will-nix.nixosModules.forgejo-site
             inputs.will-nix.nixosModules.ralph
+            inputs.will-nix.nixosModules.cli-proxy-api
             inputs.niks3.nixosModules.niks3
             inputs.b10c-nix.nixosModules.default.github-metadata-backup
             {

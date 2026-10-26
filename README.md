@@ -45,6 +45,71 @@ For unpublished module changes, `just switch-local-nix` copies the local
 `/home/will/src/nix` checkout to Nero and switches with a temporary input
 override. After publishing, run `just update-modules` and then `just switch`.
 
+## Ralph Codex subscription trial
+
+`will-nix` follows `ralph-codex-proxy`. OpenAI review stages and follow-up
+assessments use CLIProxyAPI on `127.0.0.1:8317`; PPQ keeps its own endpoint and
+credential. The encrypted `cli-proxy-api-key` secret authenticates Ralph to the
+proxy. Only the proxy user can read the upstream OAuth files.
+
+Apply this configuration from the local checkout after active reviews finish:
+
+```sh
+cd /home/will/src/nero
+just switch
+```
+
+The proxy starts, but Ralph and follow-up assessments skip startup until the
+operator enables them. Telegram and statistics remain available. Old queued
+engine configurations need requeuing after the endpoint cutover.
+
+SSH to Nero and log in as the proxy service user:
+
+```sh
+ssh -p 2222 root@nero
+cd /var/lib/cli-proxy-api
+runuser -u cli-proxy-api -- env HOME=/var/lib/cli-proxy-api \
+  /run/current-system/sw/bin/cli-proxy-api \
+  --config /run/secrets/rendered/cli-proxy-api.yaml \
+  --codex-device-login --no-browser
+```
+
+Open the displayed device-login URL on your own computer and enter the code.
+No port forwarding is needed. Authenticate with the ChatGPT account whose
+subscription should pay for Ralph. This installs no coding CLI agent and makes
+no review request. Credentials persist under `/var/lib/cli-proxy-api/auth`.
+
+Restart the proxy, then inspect the authenticated model list without printing
+the client key or passing it in curl's process arguments:
+
+```sh
+systemctl restart cli-proxy-api
+{
+  printf 'header = "Authorization: Bearer '
+  tr -d '\n' < /run/secrets/cli-proxy-api-key
+  printf '"\n'
+} | curl --fail --silent --show-error --config - http://127.0.0.1:8317/v1/models
+```
+
+Check that the list includes the configured OpenAI model IDs, currently
+`gpt-6-luna` and `gpt-6.1-sol`. A model list is not an inference entitlement
+test; the first Ralph review on Nero should verify tool calls and structured
+results after the queue is enabled. Subscription dollar totals remain API-equivalent
+usage estimates. The proxy removes the Codex output-token cap, so local
+reservations do not bound each response. No paid OpenAI credentials are
+configured in the proxy.
+
+Enable Ralph and follow-up checks after verifying login and model access:
+
+```sh
+touch /var/lib/cli-proxy-api/ralph-enabled
+systemctl start ralph
+systemctl start ralph-followup
+```
+
+The marker survives reboot. To pause review requests again, remove it and stop
+both units; the proxy and Telegram monitor can remain running.
+
 ## Secrets
 
 Secrets are managed with [sops-nix](https://github.com/Mic92/sops-nix) and encrypted with age + PGP keys. The server decrypts at boot using an age key at `/var/lib/sops-nix/key.txt`.

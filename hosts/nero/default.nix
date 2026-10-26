@@ -18,6 +18,7 @@ in
     ./hardware-configuration.nix
     ./dnsseedrs-wireguard.nix
     ./monitoring.nix
+    ./ralph-proxy.nix
   ];
 
   networking.hostName = "nero";
@@ -73,11 +74,6 @@ in
   sops.secrets.github-metadata-backup-forgejo-token = {
     owner = "gmb-bitcoin";
     group = "github-metadata";
-    mode = "0400";
-  };
-
-  sops.secrets.openai-api-key = {
-    owner = "ralph";
     mode = "0400";
   };
 
@@ -391,7 +387,6 @@ in
     origin = "https://git.fish.foo/bitcoin/bitcoin.git";
     repository = "bitcoin/bitcoin";
     forgejoApi = "https://git.fish.foo/api/v1/repos/bitcoin/bitcoin";
-    openaiKeyFile = config.sops.secrets.openai-api-key.path;
     ppqKeyFile = config.sops.secrets.ppq-api-key.path;
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
