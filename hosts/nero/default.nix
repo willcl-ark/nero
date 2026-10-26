@@ -398,7 +398,7 @@ in
     telegram = {
       enable = true;
       botTokenFile = config.sops.secrets.ralph-telegram-token.path;
-      chatId = "448332502";
+      chatId = "-1004496254448";
     };
     githubPostMajorFindings = false;
     githubTokenFile = config.sops.secrets.ralph-github-api-key.path;
