@@ -110,6 +110,53 @@ systemctl start ralph-followup
 The marker survives reboot. To pause review requests again, remove it and stop
 both units; the proxy and Telegram monitor can remain running.
 
+### Log out or switch subscription accounts
+
+CLIProxyAPI retains separate credential files for different accounts. Another
+login adds an account; it does not replace the old one. For a single-account
+cutover, SSH to Nero and pause requests before removing the old credentials:
+
+```sh
+ssh -p 2222 root@nero
+rm -f /var/lib/cli-proxy-api/ralph-enabled
+systemctl stop ralph-followup.timer ralph-stats.timer
+systemctl stop ralph-followup.service ralph-stats.service ralph.service cli-proxy-api.service
+find /var/lib/cli-proxy-api/auth -type f -name 'codex-*.json' -delete
+```
+
+This removes all saved Codex accounts from this proxy. The proxy is stopped so
+it cannot keep using tokens in memory or refresh and rewrite deleted files.
+Stop here to remain logged out. This is local credential removal, not upstream
+OAuth revocation or a logout of your other devices. The SOPS client key is
+independent of the subscription account and does not need changing.
+
+To use a different account, run the same device-login flow with the proxy
+service still stopped:
+
+```sh
+cd /var/lib/cli-proxy-api
+runuser -u cli-proxy-api -- env HOME=/var/lib/cli-proxy-api \
+  /run/current-system/sw/bin/cli-proxy-api \
+  --config /run/secrets/rendered/cli-proxy-api.yaml \
+  --codex-device-login --no-browser
+```
+
+Approve the device code using the replacement ChatGPT account. A private browser
+window can help keep it separate from your usual browser login. If login fails,
+leave Ralph paused and retry the login command.
+
+After successful login, start the proxy and use the authenticated model-list
+check above. Then enable Ralph and restore both timers:
+
+```sh
+systemctl start cli-proxy-api
+# Check the authenticated model list before enabling requests.
+touch /var/lib/cli-proxy-api/ralph-enabled
+systemctl start ralph.service ralph-stats.timer ralph-followup.timer
+```
+
+No Nix rebuild is needed when changing subscription accounts.
+
 ## Secrets
 
 Secrets are managed with [sops-nix](https://github.com/Mic92/sops-nix) and encrypted with age + PGP keys. The server decrypts at boot using an age key at `/var/lib/sops-nix/key.txt`.
