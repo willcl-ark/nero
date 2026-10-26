@@ -54,3 +54,15 @@ just switch
 The input is named `will-nix`, not `ralph`. Review the `flake.lock` diff
 before committing it. Do not replace the committed GitHub input with a
 machine-specific absolute path.
+
+## Nero deployment shortcut
+
+When the user explicitly requests "deploy to Nero", "ship to Nero", or
+`$deploy-nero` to perform deployment, use the personal skill at
+`/home/will/.codex/skills/deploy-nero/SKILL.md`. This authorizes publishing the
+completed shared Nix changes to `origin/master` and Nero's input branch,
+updating and committing only Nero's `will-nix` pin, and running `just switch`
+from `/home/will/src/nero`, followed by service checks. This is an explicit
+override of the feature-branch-only rule for that shared repository master push;
+do not ask for separate confirmation. Never force-push. Editing code or discussing
+this shortcut alone does not request deployment.
