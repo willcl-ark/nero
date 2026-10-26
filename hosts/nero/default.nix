@@ -77,11 +77,6 @@ in
     mode = "0400";
   };
 
-  sops.secrets.ppq-api-key = {
-    owner = "ralph";
-    mode = "0400";
-  };
-
   sops.secrets.forgejo-review-bot-webhook-secret = {
     owner = "ralph";
     mode = "0400";
@@ -387,7 +382,6 @@ in
     origin = "https://git.fish.foo/bitcoin/bitcoin.git";
     repository = "bitcoin/bitcoin";
     forgejoApi = "https://git.fish.foo/api/v1/repos/bitcoin/bitcoin";
-    ppqKeyFile = config.sops.secrets.ppq-api-key.path;
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
     telegram = {

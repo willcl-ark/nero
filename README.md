@@ -45,12 +45,16 @@ For unpublished module changes, `just switch-local-nix` copies the local
 `/home/will/src/nix` checkout to Nero and switches with a temporary input
 override. After publishing, run `just update-modules` and then `just switch`.
 
-## Ralph Codex subscription trial
+## Ralph subscription proxy
 
-`will-nix` follows `ralph-codex-proxy`. OpenAI review stages and follow-up
-assessments use CLIProxyAPI on `127.0.0.1:8317`; PPQ keeps its own endpoint and
-credential. The encrypted `cli-proxy-api-key` secret authenticates Ralph to the
-proxy. Only the proxy user can read the upstream OAuth files.
+`will-nix` follows `ralph-codex-proxy`. All review stages and follow-up
+assessments use CLIProxyAPI on `127.0.0.1:8317`. The second adversarial pass
+uses Claude Opus 5.5 at `xhigh`; the other stages retain their Codex models.
+Both subscription accounts must be authenticated in the proxy. PPQ is no
+longer used for inference. The encrypted `cli-proxy-api-key` secret
+authenticates Ralph to the proxy. Only the proxy user can read the upstream
+OAuth files. Individual stages can be changed with `engineConfig.stages`; see
+the [shared module documentation](https://github.com/willcl-ark/nix/blob/master/modules/ralph/README.md).
 
 Apply this configuration from the local checkout after active reviews finish:
 
@@ -91,9 +95,9 @@ systemctl restart cli-proxy-api
 } | curl --fail --silent --show-error --config - http://127.0.0.1:8317/v1/models
 ```
 
-Check that the list includes the configured OpenAI model IDs, currently
-`gpt-6-luna` and `gpt-6.1-sol`. A model list is not an inference entitlement
-test; the first Ralph review on Nero should verify tool calls and structured
+Check that the list includes the configured model IDs: `gpt-6-luna`,
+`gpt-6.1-sol` and `claude-opus-5-5`. A model list is not an inference
+entitlement test; the first Ralph review on Nero should verify tool calls and structured
 results after the queue is enabled. Subscription dollar totals remain API-equivalent
 usage estimates. The proxy removes the Codex output-token cap, so local
 reservations do not bound each response. No paid OpenAI credentials are
