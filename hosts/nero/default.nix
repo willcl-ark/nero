@@ -390,6 +390,7 @@ in
     ppqKeyFile = config.sops.secrets.ppq-api-key.path;
     webhookSecretFile = config.sops.secrets.forgejo-review-bot-webhook-secret.path;
     forgejoTokenFile = config.sops.secrets.forgejo-review-bot-token.path;
+    githubPostMajorFindings = false;
     githubTokenFile = config.sops.secrets.ralph-github-api-key.path;
     githubRepository = "bitcoin/bitcoin";
     botLogin = "ralph";
