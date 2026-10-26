@@ -13,7 +13,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     will-nix = {
-      url = "github:willcl-ark/nix/nix";
+      url = "github:willcl-ark/nix/ralph-codex-proxy";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     b10c-nix = {
