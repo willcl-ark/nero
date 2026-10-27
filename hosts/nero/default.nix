@@ -19,6 +19,7 @@ in
     ./dnsseedrs-wireguard.nix
     ./monitoring.nix
     ./ralph-proxy.nix
+    ./tailscale.nix
   ];
 
   networking.hostName = "nero";

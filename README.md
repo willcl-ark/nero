@@ -63,9 +63,10 @@ Existing API-equivalent admission budgets remain workload guardrails.
 
 The built-in management UI is enabled on loopback with a separate
 `cli-proxy-api-management-key` secret. It is not the inference client key.
-Forward it with `ssh -p 2222 -L 8317:127.0.0.1:8317 root@nero`, then open
-`http://localhost:8317/management.html` and enter the management key from
-`/run/secrets/cli-proxy-api-management-key` on Nero. Remote management remains
+From a device on the tailnet, open
+`https://nero.<tailnet>.ts.net/management.html` and enter the management key from
+`/run/secrets/cli-proxy-api-management-key` on Nero. `tailscale serve status` on
+Nero prints the exact HTTPS address. Remote management remains
 disabled. The stats service gets this root-owned key through a systemd credential;
 Ralph model requests and Telegram do not receive it. The Usage page publishes
 sanitized quota windows and reset times, without account names or credentials.
@@ -174,6 +175,31 @@ systemctl start ralph.service ralph-stats.timer ralph-followup.timer
 ```
 
 No Nix rebuild is needed when changing subscription accounts.
+
+## Tailscale dashboard access
+
+Nero enrols using the root-only `tailscale-auth-key` SOPS secret. The key's tags
+and the tailnet access policy determine who can reach it. Keep MagicDNS and
+HTTPS certificates enabled in the Tailscale admin console and allow intended
+users to reach Nero on TCP 443. Nero keeps its existing DNS configuration.
+
+`tailscale-serve-cliproxy.service` configures persistent HTTPS forwarding to
+`127.0.0.1:8317` after enrolment and proxy startup. Stopping this service removes
+its Serve listener. This forwards the proxy's full HTTP service, retaining its
+separate management and inference authentication. The backend stays on loopback;
+no public proxy listener or Funnel is configured.
+
+The Tailscale device identity persists independently of the enrolment key.
+A consumed or expired one-off key only needs replacing if the device must
+re-enrol, such as after its Tailscale state is lost.
+
+Check access and service health with:
+
+```sh
+tailscale status
+tailscale serve status
+systemctl status tailscaled tailscale-serve-cliproxy
+```
 
 ## Secrets
 
